@@ -1,0 +1,123 @@
+# PasteTrader Docker Compose Configuration
+# Development environment with all services
+
+services:
+  # Frontend: Next.js 15 with React
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+      target: development
+    container_name: pastetrader-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_TELEMETRY_DISABLED=1
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - pastetrader-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Backend: FastAPI with Python 3.13
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+      target: development
+    container_name: pastetrader-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - DATABASE_URL=postgresql+asyncpg://pastetrader:pastetrader@db:5432/pastetrader
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=${SECRET_KEY:-development-secret-key-change-in-production}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ZAI_GLM_TOKEN=${ZAI_GLM_TOKEN:-}
+      - LOG_LEVEL=INFO
+      - ALLOWED_ORIGINS=http://localhost:3000,http://frontend:3000
+    volumes:
+      - ../backend:/app
+      - backend-cache:/root/.cache
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - pastetrader-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Database: PostgreSQL 16
+  db:
+    image: postgres:16-alpine
+    container_name: pastetrader-db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=pastetrader
+      - POSTGRES_PASSWORD=pastetrader
+      - POSTGRES_DB=pastetrader
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d:ro
+    networks:
+      - pastetrader-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pastetrader -d pastetrader"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Cache: Redis 7
+  redis:
+    image: redis:7-alpine
+    container_name: pastetrader-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - pastetrader-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+networks:
+  pastetrader-network:
+    driver: bridge
+    name: pastetrader-network
+
+volumes:
+  postgres-data:
+    name: pastetrader-postgres-data
+  redis-data:
+    name: pastetrader-redis-data
+  backend-cache:
+    name: pastetrader-backend-cache

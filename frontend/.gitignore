@@ -1,0 +1,57 @@
+# ==============================================================================
+# Paste Trader Frontend - .gitignore
+# ==============================================================================
+
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+
+# Production build
+build/
+dist/
+
+# Environment files (keep examples)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!env.local.example
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Testing
+coverage/
+.nyc_output/
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Misc
+.DS_Store
+*.pem
+Thumbs.db
+
+# Vercel
+.vercel
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Turborepo
+.turbo
+
+# PWA
+public/sw.js
+public/workbox-*.js

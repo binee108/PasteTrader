@@ -1,0 +1,122 @@
+# PasteTrader Backend Dockerfile
+# Multi-stage build for FastAPI with Python 3.13 and uv
+
+# ============================================
+# Base Stage: Python with uv
+# ============================================
+FROM python:3.13-slim AS base
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv package manager
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# Set working directory
+WORKDIR /app
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
+
+# ============================================
+# Dependencies Stage: Install packages
+# ============================================
+FROM base AS deps
+
+# Copy dependency files
+COPY backend/pyproject.toml backend/uv.lock* ./
+
+# Install dependencies without dev dependencies
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project --no-dev
+
+# ============================================
+# Development Stage: Full environment
+# ============================================
+FROM base AS development
+
+WORKDIR /app
+
+# Copy dependency files
+COPY backend/pyproject.toml backend/uv.lock* ./
+
+# Install all dependencies including dev
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project
+
+# Copy source code
+COPY backend/ .
+
+# Install the project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen
+
+# Expose port
+EXPOSE 8000
+
+# Set environment variables
+ENV PYTHONPATH=/app
+
+# Start development server with hot reload
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+# ============================================
+# Builder Stage: Prepare production build
+# ============================================
+FROM deps AS builder
+
+WORKDIR /app
+
+# Copy source code
+COPY backend/ .
+
+# Install the project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
+
+# ============================================
+# Production Stage: Minimal runtime
+# ============================================
+FROM python:3.13-slim AS production
+
+WORKDIR /app
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create non-root user for security
+RUN groupadd --system --gid 1001 appgroup && \
+    useradd --system --uid 1001 --gid appgroup appuser
+
+# Copy virtual environment from builder
+COPY --from=builder --chown=appuser:appgroup /app/.venv /app/.venv
+
+# Copy application code
+COPY --from=builder --chown=appuser:appgroup /app /app
+
+# Set environment variables
+ENV PATH="/app/.venv/bin:$PATH" \
+    PYTHONPATH=/app \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Start the application with production settings
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
