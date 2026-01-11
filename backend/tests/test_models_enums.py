@@ -69,48 +69,52 @@ class TestNodeType:
 
 
 class TestToolType:
-    """Test ToolType enum values and behavior."""
+    """Test ToolType enum values and behavior.
 
-    def test_tooltype_has_data_fetcher_value(self) -> None:
-        """ToolType should have 'data_fetcher' value."""
+    TAG: [SPEC-004] [TOOL] [ENUM]
+    REQ: REQ-002 - Tool Type Enum Update
+    """
+
+    def test_tooltype_has_http_value(self) -> None:
+        """ToolType should have 'http' value."""
         from app.models.enums import ToolType
 
-        assert ToolType.DATA_FETCHER == "data_fetcher"
-        assert ToolType.DATA_FETCHER.value == "data_fetcher"
+        assert ToolType.HTTP == "http"
+        assert ToolType.HTTP.value == "http"
 
-    def test_tooltype_has_technical_indicator_value(self) -> None:
-        """ToolType should have 'technical_indicator' value."""
+    def test_tooltype_has_mcp_value(self) -> None:
+        """ToolType should have 'mcp' value."""
         from app.models.enums import ToolType
 
-        assert ToolType.TECHNICAL_INDICATOR == "technical_indicator"
-        assert ToolType.TECHNICAL_INDICATOR.value == "technical_indicator"
+        assert ToolType.MCP == "mcp"
+        assert ToolType.MCP.value == "mcp"
 
-    def test_tooltype_has_market_screener_value(self) -> None:
-        """ToolType should have 'market_screener' value."""
+    def test_tooltype_has_python_value(self) -> None:
+        """ToolType should have 'python' value."""
         from app.models.enums import ToolType
 
-        assert ToolType.MARKET_SCREENER == "market_screener"
-        assert ToolType.MARKET_SCREENER.value == "market_screener"
+        assert ToolType.PYTHON == "python"
+        assert ToolType.PYTHON.value == "python"
 
-    def test_tooltype_has_code_analyzer_value(self) -> None:
-        """ToolType should have 'code_analyzer' value."""
+    def test_tooltype_has_shell_value(self) -> None:
+        """ToolType should have 'shell' value."""
         from app.models.enums import ToolType
 
-        assert ToolType.CODE_ANALYZER == "code_analyzer"
-        assert ToolType.CODE_ANALYZER.value == "code_analyzer"
+        assert ToolType.SHELL == "shell"
+        assert ToolType.SHELL.value == "shell"
 
-    def test_tooltype_has_notification_value(self) -> None:
-        """ToolType should have 'notification' value."""
+    def test_tooltype_has_builtin_value(self) -> None:
+        """ToolType should have 'builtin' value."""
         from app.models.enums import ToolType
 
-        assert ToolType.NOTIFICATION == "notification"
-        assert ToolType.NOTIFICATION.value == "notification"
+        assert ToolType.BUILTIN == "builtin"
+        assert ToolType.BUILTIN.value == "builtin"
 
     def test_tooltype_is_string_compatible(self) -> None:
         """ToolType should serialize to string value."""
         from app.models.enums import ToolType
 
-        assert str(ToolType.DATA_FETCHER) == "data_fetcher"
+        assert str(ToolType.HTTP) == "http"
 
 
 class TestModelProvider:
@@ -279,7 +283,7 @@ class TestEnumFromString:
         """ToolType should deserialize from string value."""
         from app.models.enums import ToolType
 
-        assert ToolType("data_fetcher") == ToolType.DATA_FETCHER
+        assert ToolType("http") == ToolType.HTTP
 
     def test_modelprovider_from_string(self) -> None:
         """ModelProvider should deserialize from string value."""

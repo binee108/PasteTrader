@@ -34,14 +34,17 @@ class ToolType(str, Enum):
     """Tool classification types.
 
     Defines the categories of tools available in the system.
-    Each tool type represents a specific functionality domain.
+    Each tool type represents a specific execution mechanism.
+
+    TAG: [SPEC-004] [TOOL] [ENUM]
+    REQ: REQ-002 - Tool Type Enum Update
     """
 
-    DATA_FETCHER = "data_fetcher"
-    TECHNICAL_INDICATOR = "technical_indicator"
-    MARKET_SCREENER = "market_screener"
-    CODE_ANALYZER = "code_analyzer"
-    NOTIFICATION = "notification"
+    HTTP = "http"
+    MCP = "mcp"
+    PYTHON = "python"
+    SHELL = "shell"
+    BUILTIN = "builtin"
 
     def __str__(self) -> str:
         """Return the string value for serialization."""

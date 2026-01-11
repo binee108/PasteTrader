@@ -106,11 +106,12 @@ class TestUUIDMixin:
 # Define the test model at module level to avoid redefinition issues
 _test_model_defined = False
 _TestModelClass = None
+_MockUserClass = None
 
 
 def get_test_model_class():
     """Get or create the test model class."""
-    global _test_model_defined, _TestModelClass
+    global _test_model_defined, _TestModelClass, _MockUserClass
 
     if not _test_model_defined:
         from app.models.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
@@ -123,7 +124,17 @@ def get_test_model_class():
 
             name: Mapped[str] = mapped_column(String(100), nullable=False)
 
+        # Mock User model to satisfy FK constraints from Tool/Agent models
+        class User(UUIDMixin, Base):
+            """Mock User model for testing FK references."""
+
+            __tablename__ = "users"
+            __table_args__ = {"extend_existing": True}
+
+            name: Mapped[str] = mapped_column(String(100), nullable=False)
+
         _TestModelClass = TestModel
+        _MockUserClass = User
         _test_model_defined = True
 
     return _TestModelClass

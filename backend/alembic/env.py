@@ -17,7 +17,15 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 
 # Import your Base and all models here
-from app.models.base import Base
+# All models must be imported for Alembic autogenerate to detect them
+from app.models import (  # noqa: F401
+    Agent,
+    Base,
+    Edge,
+    Node,
+    Tool,
+    Workflow,
+)
 
 # This is the Alembic Config object
 config = context.config
@@ -39,7 +47,7 @@ def get_url() -> str:
 
     if settings.DATABASE_URL is None:
         raise ValueError(
-            "DATABASE_URL is not set. " "Please configure it in your .env file."
+            "DATABASE_URL is not set. Please configure it in your .env file."
         )
 
     url = str(settings.DATABASE_URL)
