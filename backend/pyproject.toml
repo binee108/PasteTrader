@@ -34,7 +34,10 @@ dependencies = [
     "anthropic>=0.45.0",
     "openai>=1.60.0",
     "alembic>=1.18.0",
-    "passlib[bcrypt]>=1.1.0",
+    # Password hashing with bcrypt compatibility
+    "passlib[bcrypt]==1.7.4",
+    "bcrypt==4.1.3",
+    "email-validator>=2.3.0",
 ]
 
 [project.optional-dependencies]
@@ -44,6 +47,7 @@ dev = [
     "pytest-cov>=6.0.0",
     "ruff>=0.9.0",
     "mypy>=1.14.0",
+    "types-passlib>=1.7.4",
 ]
 
 [project.urls]
