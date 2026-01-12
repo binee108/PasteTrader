@@ -8,11 +8,10 @@ REQ: REQ-004 - Model Provider Enum
 """
 
 import uuid
-from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import String, inspect, text
+from sqlalchemy import String
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -279,17 +278,19 @@ def get_mock_user_class():
     global _test_models_defined, _MockUserClass
 
     if not _test_models_defined:
+        from typing import ClassVar
+
         from app.models.base import Base, UUIDMixin
 
-        class User(UUIDMixin, Base):
+        class TestUserToolAgent(UUIDMixin, Base):
             """Mock User model for testing FK references."""
 
             __tablename__ = "users"
-            __table_args__ = {"extend_existing": True}
+            __table_args__: ClassVar[dict[str, bool]] = {"extend_existing": True}
 
             name: Mapped[str] = mapped_column(String(100), nullable=False)
 
-        _MockUserClass = User
+        _MockUserClass = TestUserToolAgent
         _test_models_defined = True
 
     return _MockUserClass
@@ -299,8 +300,6 @@ def get_mock_user_class():
 @pytest_asyncio.fixture
 async def db_session():
     """Create async session for testing with tables created."""
-    from app.models.agent import Agent
-    from app.models.tool import Tool
 
     # Get mock User class to satisfy FK constraints
     get_mock_user_class()
