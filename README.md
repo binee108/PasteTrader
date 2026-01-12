@@ -24,6 +24,8 @@ PasteTrader는 워크플로우 기반 자동화 플랫폼으로, 사용자가 �
 - **PostgreSQL 16**: 기본 데이터베이스
 - **Alembic**: 데이터베이스 마이그레이션
 - **Pydantic 2.10**: 데이터 검증
+- **passlib[bcrypt]**: 비밀번호 해싱
+- **python-jose**: JWT 토큰 처리
 
 ### 프론트엔드
 
@@ -249,6 +251,7 @@ npm run dev
 ### SPEC 문서
 
 - [SPEC-001: Database Foundation](.moai/specs/SPEC-001/spec.md) - 구현 완료
+- [SPEC-002: User Authentication Model](.moai/specs/SPEC-002/spec.md) - 구현 완료
 - [SPEC-007: Workflow Execution Engine](.moai/specs/SPEC-007/spec.md) - 구현 완료
 
 ## 테스트
@@ -278,11 +281,17 @@ open htmlcov/index.html
 
 ## 상태
 
-- [x] Phase 0: 데이터베이스 기반 구축 (SPEC-001)
+- [x] Phase 0: 데이터베이스 기반 구축 (SPEC-001, SPEC-002)
 - [x] Phase 1: 워크플로우 코어 모델 (SPEC-007)
 - [ ] Phase 2: 실행 추적 모델
 - [ ] Phase 3: API 파운데이션
 - [ ] Phase 4: 프론트엔드 개발
+
+### 완료된 SPEC
+
+- **SPEC-001**: Database Foundation Setup (베이스 모델 및 Mixin 구현)
+- **SPEC-002**: User Authentication Model (사용자 인증 모델 및 보안 유틸리티)
+- **SPEC-007**: Workflow Execution Engine (워크플로우 실행 엔진)
 
 ## 연락처
 
