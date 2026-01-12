@@ -3,21 +3,27 @@
 TAG: [SPEC-004] [DATABASE] [TOOL]
 REQ: REQ-001 - Tool Model Definition
 REQ: REQ-002 - Tool Type Enum Update
+REQ: REQ-005 - User-Tool Relationship
 
 This module defines the Tool model for managing external tools
 including HTTP APIs, MCP servers, Python functions, shell commands,
 and builtin utilities.
 """
 
+from __future__ import annotations
+
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, Boolean, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import GUID, Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 from app.models.enums import ToolType
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 # Use JSONB for PostgreSQL, JSON for other databases (like SQLite for testing)
 JSONType = JSON().with_variant(JSONB(), "postgresql")
@@ -118,6 +124,31 @@ class Tool(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
         default=False,
         server_default="false",
     )
+
+    # Relationships
+    owner: Mapped[User] = relationship(
+        "User",
+        back_populates="tools",
+    )
+
+    def get_masked_auth_config(self) -> dict[str, Any] | None:
+        """Get a masked version of auth_config for display/logging.
+
+        Returns a copy of auth_config with sensitive field values masked.
+        Returns None if auth_config is None.
+
+        Returns:
+            Masked auth_config dictionary or None
+
+        Example:
+            >>> tool = Tool(auth_config={"api_key": "secret123"})
+            >>> masked = tool.get_masked_auth_config()
+            >>> masked["api_key"]
+            '***'
+        """
+        from app.utils.crypto import mask_auth_config
+
+        return mask_auth_config(self.auth_config)
 
     def __repr__(self) -> str:
         """Return string representation of the tool."""

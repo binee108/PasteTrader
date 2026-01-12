@@ -3,20 +3,26 @@
 TAG: [SPEC-004] [DATABASE] [AGENT]
 REQ: REQ-003 - Agent Model Definition
 REQ: REQ-004 - Model Provider Enum
+REQ: REQ-005 - User-Agent Relationship
 
 This module defines the Agent model for managing LLM-based AI agents
 that can use tools and maintain conversation memory.
 """
 
+from __future__ import annotations
+
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import JSON, Boolean, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import GUID, Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 from app.models.enums import ModelProvider
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 # Use JSONB for PostgreSQL, JSON for other databases (like SQLite for testing)
 JSONType = JSON().with_variant(JSONB(), "postgresql")
@@ -117,6 +123,12 @@ class Agent(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
         nullable=False,
         default=False,
         server_default="false",
+    )
+
+    # Relationships
+    owner: Mapped[User] = relationship(
+        "User",
+        back_populates="agents",
     )
 
     def __repr__(self) -> str:

@@ -1,15 +1,17 @@
 """User model for authentication and ownership.
 
-TAG: [SPEC-002] [SPEC-007] [DATABASE] [USER]
+TAG: [SPEC-002] [SPEC-004] [SPEC-007] [DATABASE] [USER]
 REQ: REQ-001 - User Model Definition
 REQ: REQ-002 - User-Workflow Foreign Key Support
 REQ: REQ-003 - Account Status Management
 REQ: REQ-005 - User-Workflow Relationship
+REQ: SPEC-004 REQ-005 - User-Tool and User-Agent Relationships
 
 This module defines the User model that serves as the owner reference
-for workflows and other user-owned resources in PasteTrader.
+for workflows, tools, agents, and other user-owned resources in PasteTrader.
 
 Enhanced for SPEC-002 with password hashing support.
+Enhanced for SPEC-004 with tools and agents relationships.
 """
 
 from __future__ import annotations
@@ -22,6 +24,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
+    from app.models.agent import Agent
+    from app.models.tool import Tool
     from app.models.workflow import Workflow
 
 
@@ -29,7 +33,7 @@ class User(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     """User model for authentication and resource ownership.
 
     Provides the structure needed for user identification, authentication,
-    and workflow ownership.
+    and ownership of workflows, tools, and agents.
 
     Attributes:
         id: UUID primary key (from UUIDMixin)
@@ -40,6 +44,8 @@ class User(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
         updated_at: Timestamp of last update (from TimestampMixin)
         deleted_at: Soft delete timestamp (from SoftDeleteMixin)
         workflows: Relationship to owned Workflow models
+        tools: Relationship to owned Tool models
+        agents: Relationship to owned Agent models
 
     Security:
         - Passwords are stored as bcrypt hashes (cost factor 12)
@@ -75,6 +81,18 @@ class User(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     # Relationships
     workflows: Mapped[list[Workflow]] = relationship(
         "Workflow",
+        back_populates="owner",
+        passive_deletes=True,
+    )
+
+    tools: Mapped[list[Tool]] = relationship(
+        "Tool",
+        back_populates="owner",
+        passive_deletes=True,
+    )
+
+    agents: Mapped[list[Agent]] = relationship(
+        "Agent",
         back_populates="owner",
         passive_deletes=True,
     )
