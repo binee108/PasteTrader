@@ -317,12 +317,12 @@ class TestEnumValueError:
         """Invalid NodeType value should raise ValueError."""
         from app.models.enums import NodeType
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="invalid_value"):
             NodeType("invalid_value")
 
     def test_invalid_tooltype_raises_valueerror(self) -> None:
         """Invalid ToolType value should raise ValueError."""
         from app.models.enums import ToolType
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="invalid_value"):
             ToolType("invalid_value")

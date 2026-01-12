@@ -88,7 +88,7 @@ class TestUserEmail:
 class TestUserPassword:
     """Test password methods on User model."""
 
-    async def test_set_password_hashes_password(self, db_session):
+    async def test_set_password_hashes_password(self):
         """Test that set_password creates a bcrypt hash."""
         user = User(
             email="test@example.com",
@@ -99,7 +99,7 @@ class TestUserPassword:
         assert user.hashed_password.startswith("$2b$12$")
         assert len(user.hashed_password) == 60
 
-    async def test_verify_password_correct(self, db_session):
+    async def test_verify_password_correct(self):
         """Test verifying correct password."""
         user = User(
             email="test@example.com",
@@ -109,7 +109,7 @@ class TestUserPassword:
 
         assert user.verify_password("SecurePass123!") is True
 
-    async def test_verify_password_incorrect(self, db_session):
+    async def test_verify_password_incorrect(self):
         """Test verifying incorrect password."""
         user = User(
             email="test@example.com",
@@ -209,8 +209,9 @@ class TestUserWorkflowRelationship:
 
     async def test_user_can_own_multiple_workflows(self, db_session):
         """Test that user can own multiple workflows (AC-015)."""
-        from app.models.workflow import Workflow
         from sqlalchemy.orm import selectinload
+
+        from app.models.workflow import Workflow
 
         user = User(
             email="test@example.com",

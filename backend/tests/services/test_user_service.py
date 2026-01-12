@@ -352,7 +352,6 @@ class TestChangePassword:
 
     async def test_change_password_wrong_old_password(self, db_session):
         """Test changing password with wrong old password."""
-        from uuid import uuid4
 
         service = UserService(db_session)
 

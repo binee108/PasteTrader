@@ -9,7 +9,7 @@ Tests for User Pydantic schemas.
 """
 
 import pytest
-from pydantic import EmailStr, ValidationError
+from pydantic import ValidationError
 
 from app.schemas.user import (
     UserChangePassword,
@@ -249,8 +249,8 @@ class TestUserResponse:
 
     async def test_user_response_from_orm(self, db_session):
         """Test creating UserResponse from ORM object."""
+
         from app.models.user import User
-        from datetime import datetime, UTC
 
         user = User(
             email="test@example.com",
