@@ -23,22 +23,18 @@ from app.services.workflow_service import (
 )
 
 __all__ = [
-    # Workflow Exceptions
     "DAGValidationError",
     "EdgeNotFoundError",
-    # Workflow Services
     "EdgeService",
-    # Execution Services
     "ExecutionLogService",
     "InvalidNodeReferenceError",
     "NodeExecutionService",
     "NodeNotFoundError",
     "NodeService",
+    "UserService",
     "VersionConflictError",
     "WorkflowExecutionService",
     "WorkflowNotFoundError",
     "WorkflowService",
     "WorkflowServiceError",
-    # User Services
-    "UserService",
 ]

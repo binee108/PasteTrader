@@ -14,8 +14,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from app.schemas.base import BaseResponse
-
 
 class UserBase(BaseModel):
     """Base user schema with common fields."""
@@ -72,8 +70,7 @@ class UserCreate(UserBase):
         )
 
         try:
-            if not is_password_complex_enough(v, raise_error=True):
-                raise ValueError("Password does not meet complexity requirements")
+            is_password_complex_enough(v, raise_error=True)
         except PasswordComplexityError as e:
             raise ValueError(str(e)) from e
 
@@ -102,8 +99,7 @@ class UserUpdate(BaseModel):
         )
 
         try:
-            if not is_password_complex_enough(v, raise_error=True):
-                raise ValueError("Password does not meet complexity requirements")
+            is_password_complex_enough(v, raise_error=True)
         except PasswordComplexityError as e:
             raise ValueError(str(e)) from e
 
@@ -173,8 +169,7 @@ class UserChangePassword(BaseModel):
         )
 
         try:
-            if not is_password_complex_enough(v, raise_error=True):
-                raise ValueError("Password does not meet complexity requirements")
+            is_password_complex_enough(v, raise_error=True)
         except PasswordComplexityError as e:
             raise ValueError(str(e)) from e
 
@@ -183,10 +178,10 @@ class UserChangePassword(BaseModel):
 
 __all__ = [
     "UserBase",
-    "UserCreate",
-    "UserUpdate",
-    "UserInDB",
-    "UserResponse",
-    "UserLogin",
     "UserChangePassword",
+    "UserCreate",
+    "UserInDB",
+    "UserLogin",
+    "UserResponse",
+    "UserUpdate",
 ]

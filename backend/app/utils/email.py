@@ -17,7 +17,6 @@ from __future__ import annotations
 import re
 from typing import Final
 
-
 # Email validation regex pattern
 # Supports: local@domain, local+tag@domain, first.last@domain.co.uk
 EMAIL_PATTERN: Final[re.Pattern[str]] = re.compile(
@@ -54,13 +53,8 @@ def normalize_email(email: str | None) -> str:
     if not email:
         return ""
 
-    # Convert to lowercase
-    email = email.lower()
-
-    # Trim whitespace
-    email = email.strip()
-
-    return email
+    # Convert to lowercase and trim whitespace
+    return email.lower().strip()
 
 
 def is_valid_email_format(email: str | None) -> bool:
@@ -97,6 +91,6 @@ def is_valid_email_format(email: str | None) -> bool:
 
 
 __all__ = [
-    "normalize_email",
     "is_valid_email_format",
+    "normalize_email",
 ]
