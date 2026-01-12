@@ -13,10 +13,7 @@ router = APIRouter()
 router.include_router(workflows.router, prefix="/workflows", tags=["Workflows"])
 router.include_router(executions.router, prefix="/executions", tags=["Executions"])
 
-# TODO: Future domain routers
-# from app.api.v1 import tools, agents
-# router.include_router(tools.router, prefix="/tools", tags=["Tools"])
-# router.include_router(agents.router, prefix="/agents", tags=["Agents"])
+# TODO: Add future domain routers (tools, agents) when implemented
 
 
 @router.get("/status", tags=["Status"])

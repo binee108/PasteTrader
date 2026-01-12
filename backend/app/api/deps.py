@@ -275,18 +275,13 @@ Usage:
 
 
 __all__ = [
-    # Authentication (placeholders)
     "CurrentUser",
     "CurrentUserOptional",
-    # Database
     "DBSession",
     "ListQuery",
-    # Combined
     "ListQueryParams",
     "Pagination",
-    # Pagination
     "PaginationParams",
-    # Sorting
     "SortParams",
     "Sorting",
     "get_current_user",
