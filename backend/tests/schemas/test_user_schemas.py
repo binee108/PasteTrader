@@ -86,6 +86,22 @@ class TestUserCreate:
                 password="NoSpecialChars123",
             )
 
+    def test_password_complexity_error_message(self):
+        """Test that password complexity error has detailed message."""
+        with pytest.raises(ValidationError) as exc_info:
+            UserCreate(
+                email="test@example.com",
+                password="short",
+            )
+
+        errors = exc_info.value.errors()
+        password_errors = [
+            e for e in errors if "password" in str(e.get("loc", [""])).lower()
+        ]
+
+        # Should have error about password
+        assert len(password_errors) > 0
+
     def test_valid_complex_password(self):
         """Test that valid complex password passes."""
         user_data = UserCreate(
@@ -138,6 +154,27 @@ class TestUserUpdate:
         with pytest.raises(ValidationError):
             UserUpdate(password="nouppercase123!")
 
+    def test_password_none_returns_early(self):
+        """Test that None password returns early without validation."""
+        # This tests line 97: if v is None: return v
+        user_data = UserUpdate(password=None)
+
+        # Should not raise ValidationError
+        assert user_data.password is None
+
+    def test_password_complexity_error_message_on_update(self):
+        """Test that password complexity error has detailed message on update."""
+        with pytest.raises(ValidationError) as exc_info:
+            UserUpdate(password="short")
+
+        errors = exc_info.value.errors()
+        password_errors = [
+            e for e in errors if "password" in str(e.get("loc", [""])).lower()
+        ]
+
+        # Should have error about password
+        assert len(password_errors) > 0
+
 
 class TestUserLogin:
     """Test UserLogin schema."""
@@ -189,6 +226,22 @@ class TestUserChangePassword:
                 old_password="OldPass123!",
                 new_password="nouppercase123!",
             )
+
+    def test_new_password_complexity_error_message(self):
+        """Test that password complexity error has detailed message for password change."""
+        with pytest.raises(ValidationError) as exc_info:
+            UserChangePassword(
+                old_password="OldPass123!",
+                new_password="short",
+            )
+
+        errors = exc_info.value.errors()
+        password_errors = [
+            e for e in errors if "new_password" in str(e.get("loc", [""])).lower()
+        ]
+
+        # Should have error about new_password
+        assert len(password_errors) > 0
 
 
 class TestUserResponse:

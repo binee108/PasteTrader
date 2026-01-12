@@ -14,6 +14,7 @@ import pytest
 
 from app.core.security import (
     PasswordComplexityError,
+    benchmark_hash_performance,
     hash_password,
     is_password_complex_enough,
     verify_password,
@@ -218,3 +219,86 @@ class TestSecurityEdgeCases:
         # Different case should not match
         assert verify_password("securepass123!", hashed) is False
         assert verify_password("SECUREPASS123!", hashed) is False
+
+
+class TestPasswordLengthLimit:
+    """Test bcrypt 72-byte password limit handling."""
+
+    def test_hash_password_over_72_bytes(self):
+        """Test hashing password longer than 72 bytes (bcrypt limit)."""
+        # Create a password longer than 72 bytes
+        # 100 characters * 3 bytes (UTF-8) = 300 bytes > 72 bytes limit
+        long_password = "A" * 100
+        hashed = hash_password(long_password)
+
+        # Should successfully hash (truncated to 72 bytes)
+        assert hashed.startswith("$2b$12$")
+        assert len(hashed) == 60
+
+    def test_verify_password_over_72_bytes(self):
+        """Test verifying password longer than 72 bytes."""
+        # Create a password longer than 72 bytes
+        long_password = "B" * 100
+        hashed = hash_password(long_password)
+
+        # Should verify correctly (both truncated to 72 bytes)
+        assert verify_password(long_password, hashed) is True
+
+        # Different password that truncates to same 72 bytes
+        different_password = "B" * 100 + "extra"
+        assert verify_password(different_password, hashed) is True
+
+    def test_hash_password_mixed_unicode_over_limit(self):
+        """Test hashing password with mixed unicode exceeding 72 bytes."""
+        # Mix of ASCII and multi-byte unicode characters
+        password = "SecurePass123!🔐" * 20  # Way over 72 bytes
+        hashed = hash_password(password)
+
+        # Should successfully hash (truncated to 72 bytes)
+        assert hashed.startswith("$2b$12$")
+        assert verify_password(password, hashed) is True
+
+
+class TestBenchmarkPerformance:
+    """Test password hashing and verification benchmarking."""
+
+    def test_benchmark_hash_performance_returns_stats(self):
+        """Test that benchmark returns expected statistics."""
+        stats = benchmark_hash_performance(iterations=5)
+
+        # Should return dictionary with expected keys
+        assert isinstance(stats, dict)
+        assert "hash_mean" in stats
+        assert "hash_max" in stats
+        assert "verify_mean" in stats
+        assert "verify_max" in stats
+
+    def test_benchmark_performance_within_limits(self):
+        """Test that benchmark performance meets requirements (AC-031)."""
+        stats = benchmark_hash_performance(iterations=5)
+
+        # Mean times should be under 500ms
+        assert stats["hash_mean"] < 0.5, "Hash mean time should be under 500ms"
+        assert stats["verify_mean"] < 0.5, "Verify mean time should be under 500ms"
+
+        # Max times should also be under 500ms
+        assert stats["hash_max"] < 0.5, "Hash max time should be under 500ms"
+        assert stats["verify_max"] < 0.5, "Verify max time should be under 500ms"
+
+    def test_benchmark_returns_positive_times(self):
+        """Test that benchmark returns positive time values."""
+        stats = benchmark_hash_performance(iterations=3)
+
+        # All times should be positive
+        assert stats["hash_mean"] > 0
+        assert stats["hash_max"] > 0
+        assert stats["verify_mean"] > 0
+        assert stats["verify_max"] > 0
+
+    def test_benchmark_max_greater_than_mean(self):
+        """Test that max time is greater than or equal to mean time."""
+        stats = benchmark_hash_performance(iterations=5)
+
+        # Max should be >= mean for both operations
+        assert stats["hash_max"] >= stats["hash_mean"]
+        assert stats["verify_max"] >= stats["verify_mean"]
