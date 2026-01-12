@@ -110,7 +110,12 @@ ignore = [
     "E501",   # line too long (handled by formatter)
     "B008",   # do not perform function calls in argument defaults
     "B904",   # raise without from inside except
+    "N805",   # declared_attr uses cls (SQLAlchemy pattern)
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# uuid and enums are needed at runtime for SQLAlchemy models
+"app/models/*.py" = ["TC001", "TC003"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

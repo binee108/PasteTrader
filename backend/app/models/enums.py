@@ -115,11 +115,30 @@ class TriggerType(str, Enum):
         return self.value
 
 
+class LogLevel(str, Enum):
+    """Execution log level classification.
+
+    TAG: [SPEC-005] [EXECUTION] [ENUM]
+
+    Defines the severity levels for execution logs.
+    """
+
+    DEBUG = "debug"
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+
+    def __str__(self) -> str:
+        """Return the string value for serialization."""
+        return self.value
+
+
 __all__ = [
+    "AuthMode",
+    "ExecutionStatus",
+    "LogLevel",
+    "ModelProvider",
     "NodeType",
     "ToolType",
-    "ModelProvider",
-    "ExecutionStatus",
-    "AuthMode",
     "TriggerType",
 ]

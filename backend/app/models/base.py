@@ -9,9 +9,8 @@ for common database patterns like timestamps and soft deletion.
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any
 
-from sqlalchemy import DateTime, event, func
+from sqlalchemy import DateTime, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 
@@ -22,10 +21,6 @@ class Base(DeclarativeBase):
     All models should inherit from this class to ensure consistent
     behavior and configuration across the application.
     """
-
-    # Configure naming conventions for constraints
-    # This ensures consistent naming for foreign keys, indexes, etc.
-    pass
 
 
 class UUIDMixin:
@@ -119,7 +114,7 @@ class SoftDeleteMixin:
 
 __all__ = [
     "Base",
-    "UUIDMixin",
-    "TimestampMixin",
     "SoftDeleteMixin",
+    "TimestampMixin",
+    "UUIDMixin",
 ]

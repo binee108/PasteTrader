@@ -14,18 +14,20 @@ This module defines the core workflow models for PasteTrader's DAG-based
 workflow engine. These models support visual workflow editing and execution.
 """
 
+from __future__ import annotations
+
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
     Integer,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -36,6 +38,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 from app.models.enums import NodeType
+
+if TYPE_CHECKING:
+    from app.models.execution import WorkflowExecution
 
 # Use JSONB for PostgreSQL, JSON for other databases (like SQLite for testing)
 JSONType = JSON().with_variant(JSONB(), "postgresql")
@@ -115,17 +120,24 @@ class Workflow(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     )
 
     # Relationships
-    nodes: Mapped[list["Node"]] = relationship(
+    nodes: Mapped[list[Node]] = relationship(
         "Node",
         back_populates="workflow",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
 
-    edges: Mapped[list["Edge"]] = relationship(
+    edges: Mapped[list[Edge]] = relationship(
         "Edge",
         back_populates="workflow",
         cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    # Relationship to WorkflowExecution
+    executions: Mapped[list[WorkflowExecution]] = relationship(
+        "WorkflowExecution",
+        back_populates="workflow",
         passive_deletes=True,
     )
 
@@ -243,7 +255,7 @@ class Node(UUIDMixin, TimestampMixin, Base):
     )
 
     # Relationships
-    workflow: Mapped["Workflow"] = relationship(
+    workflow: Mapped[Workflow] = relationship(
         "Workflow",
         back_populates="nodes",
     )
@@ -340,17 +352,17 @@ class Edge(UUIDMixin, Base):
     )
 
     # Relationships
-    workflow: Mapped["Workflow"] = relationship(
+    workflow: Mapped[Workflow] = relationship(
         "Workflow",
         back_populates="edges",
     )
 
-    source_node: Mapped["Node"] = relationship(
+    source_node: Mapped[Node] = relationship(
         "Node",
         foreign_keys=[source_node_id],
     )
 
-    target_node: Mapped["Node"] = relationship(
+    target_node: Mapped[Node] = relationship(
         "Node",
         foreign_keys=[target_node_id],
     )
@@ -381,4 +393,4 @@ class Edge(UUIDMixin, Base):
         )
 
 
-__all__ = ["Workflow", "Node", "Edge"]
+__all__ = ["Edge", "Node", "Workflow"]
