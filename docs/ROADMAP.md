@@ -49,11 +49,15 @@ PasteTrader는 AI 기반 트레이딩 워크플로우 자동화 플랫폼입니�
 **Deliverables**:
 - [x] Alembic configuration with async support
 - [x] Base model with common mixins (UUIDMixin, TimestampMixin, SoftDeleteMixin)
-- [x] User model with password hashing
+- [x] User model with password hashing (SPEC-002)
+- [x] Security utilities with bcrypt hashing (SPEC-002)
+- [x] Email normalization and validation (SPEC-002)
+- [x] User schemas and service layer (SPEC-002)
+- [x] Centralized logging module (SPEC-002)
 - [x] Initial migration script
 - [x] Migration safety check (CONFIRM_PRODUCTION_MIGRATION)
 - [x] Soft delete filtering in Service Layer
-- [x] Test coverage 87.64%
+- [x] Test coverage 89.02% (877 tests passed)
 
 ---
 
@@ -358,39 +362,39 @@ Phase 2 ────────────────┘      Phase 7 <──
 
 ## SPEC Document Mapping
 
-| SPEC ID | Phase | Title | Priority |
-|---------|-------|-------|----------|
-| SPEC-001 | 0 | Database Foundation Setup | P0 |
-| SPEC-002 | 0 | User Authentication Model | P0 |
-| SPEC-003 | 1 | Workflow Domain Models | P0 |
-| SPEC-004 | 1 | Tool & Agent Registry | P0 |
-| SPEC-005 | 2 | Execution Tracking Models | P0 |
-| SPEC-006 | 2 | Schedule Configuration Model | P1 |
-| SPEC-007 | 3 | Workflow API Endpoints | P0 |
-| SPEC-008 | 3 | Execution API Endpoints | P0 |
-| SPEC-009 | 3 | Tool/Agent API Endpoints | P1 |
-| SPEC-010 | 4 | DAG Validation Service | P0 |
-| SPEC-011 | 4 | Workflow Execution Engine | P0 |
-| SPEC-012 | 4 | Node Processor Framework | P0 |
-| SPEC-013 | 5 | LLM Provider Abstraction | P0 |
-| SPEC-014 | 5 | Anthropic Provider | P0 |
-| SPEC-015 | 5 | OpenAI Provider | P1 |
-| SPEC-016 | 5 | Z.AI Provider | P2 |
-| SPEC-017 | 5 | Agent Node Integration | P0 |
-| SPEC-018 | 6 | Content Parser Framework | P1 |
-| SPEC-019 | 6 | PDF Parser | P1 |
-| SPEC-020 | 6 | YouTube Parser | P2 |
-| SPEC-021 | 7 | React Flow Canvas | P0 |
-| SPEC-022 | 7 | Custom Node Components | P0 |
-| SPEC-023 | 7 | Node Configuration Panel | P1 |
-| SPEC-024 | 7 | Execution Monitor UI | P1 |
-| SPEC-025 | 7 | Dashboard | P2 |
-| SPEC-026 | 8 | APScheduler Integration | P1 |
-| SPEC-027 | 8 | Schedule Management Service | P1 |
-| SPEC-028 | 8 | Schedule UI | P2 |
-| SPEC-029 | 9 | Stock Data Integration | P2 |
-| SPEC-030 | 9 | Stock Screening Service | P2 |
-| SPEC-031 | 9 | Stock Node Types | P2 |
+| SPEC ID | Phase | Title | Priority | Status |
+|---------|-------|-------|----------|--------|
+| SPEC-001 | 0 | Database Foundation Setup | P0 | ✅ |
+| SPEC-002 | 0 | User Authentication Model | P0 | ✅ |
+| SPEC-003 | 1 | Workflow Domain Models | P0 | |
+| SPEC-004 | 1 | Tool & Agent Registry | P0 | |
+| SPEC-005 | 2 | Execution Tracking Models | P0 | |
+| SPEC-006 | 2 | Schedule Configuration Model | P1 | |
+| SPEC-007 | 3 | Workflow API Endpoints | P0 | |
+| SPEC-008 | 3 | Execution API Endpoints | P0 | |
+| SPEC-009 | 3 | Tool/Agent API Endpoints | P1 | |
+| SPEC-010 | 4 | DAG Validation Service | P0 | |
+| SPEC-011 | 4 | Workflow Execution Engine | P0 | |
+| SPEC-012 | 4 | Node Processor Framework | P0 | |
+| SPEC-013 | 5 | LLM Provider Abstraction | P0 | |
+| SPEC-014 | 5 | Anthropic Provider | P0 | |
+| SPEC-015 | 5 | OpenAI Provider | P1 | |
+| SPEC-016 | 5 | Z.AI Provider | P2 | |
+| SPEC-017 | 5 | Agent Node Integration | P0 | |
+| SPEC-018 | 6 | Content Parser Framework | P1 | |
+| SPEC-019 | 6 | PDF Parser | P1 | |
+| SPEC-020 | 6 | YouTube Parser | P2 | |
+| SPEC-021 | 7 | React Flow Canvas | P0 | |
+| SPEC-022 | 7 | Custom Node Components | P0 | |
+| SPEC-023 | 7 | Node Configuration Panel | P1 | |
+| SPEC-024 | 7 | Execution Monitor UI | P1 | |
+| SPEC-025 | 7 | Dashboard | P2 | |
+| SPEC-026 | 8 | APScheduler Integration | P1 | |
+| SPEC-027 | 8 | Schedule Management Service | P1 | |
+| SPEC-028 | 8 | Schedule UI | P2 | |
+| SPEC-029 | 9 | Stock Data Integration | P2 | |
+| SPEC-030 | 9 | Stock Screening Service | P2 | |
+| SPEC-031 | 9 | Stock Node Types | P2 | |
 
 **Priority Legend**:
 - P0: MVP 필수
@@ -453,12 +457,20 @@ schedules             - APScheduler 작업
 ### Current Status (2026-01-12)
 
 **Completed**:
-- ✅ Phase 0: Database Foundation (SPEC-001)
-  - Alembic 설정 완료
-  - Base 모델 구현 (UUIDMixin, TimestampMixin, SoftDeleteMixin)
-  - Soft Delete 필터링 구현
-  - Migration Safety 체크 추가
-  - 테스트 커버리지 87.64% 달성
+- ✅ Phase 0: Database Foundation (SPEC-001, SPEC-002)
+  - Alembic 설정 완료 (SPEC-001)
+  - Base 모델 구현 (UUIDMixin, TimestampMixin, SoftDeleteMixin) (SPEC-001)
+  - Soft Delete 필터링 구현 (SPEC-001)
+  - Migration Safety 체크 추가 (SPEC-001)
+  - User Authentication Model 구현 (SPEC-002)
+    - User 모델 (email, hashed_password, is_active, is_superuser)
+    - Security utilities (bcrypt 비밀번호 해싱)
+    - Email normalization and validation utilities
+    - User schemas (UserCreate, UserUpdate, UserResponse, UserLogin)
+    - User service layer (CRUD operations)
+    - Centralized logging module
+  - 테스트 커버리지 89.02% 달성 (877 tests passed)
+  - TRUST 5 퀄리티 게이트 통과
   - 문서 동기화 완료
   - PR 생성: https://github.com/binee108/PasteTrader/pull/1
 
