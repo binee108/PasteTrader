@@ -305,6 +305,7 @@ class WorkflowService:
             )
         )
         duplicate = result.scalar_one_or_none()
+        assert duplicate is not None  # Workflow just created and flushed
         return duplicate
 
 

@@ -21,11 +21,7 @@ from app.models.enums import NodeType
 from app.schemas.base import (
     BaseResponse,
     BaseSchema,
-    DescriptionField,
-    NameField,
-    OptionalNameField,
     PaginatedResponse,
-    VersionField,
 )
 
 # =============================================================================
@@ -144,7 +140,13 @@ class RetryConfig(BaseSchema):
 class NodeBase(BaseSchema):
     """Base schema for Node with common fields."""
 
-    name: str = NameField
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Display name",
+        examples=["My Node"],
+    )
     node_type: NodeType = Field(
         ...,
         description="Type of the node (trigger, tool, agent, condition, adapter, parallel, aggregator)",
@@ -217,7 +219,13 @@ class NodeUpdate(BaseSchema):
     All fields are optional to support partial updates.
     """
 
-    name: str | None = OptionalNameField
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+        description="Display name",
+        examples=["My Node"],
+    )
     position_x: float | None = Field(
         default=None,
         description="X coordinate for UI positioning",
@@ -322,8 +330,19 @@ class NodeResponse(BaseResponse):
 class WorkflowBase(BaseSchema):
     """Base schema for Workflow with common fields."""
 
-    name: str = NameField
-    description: str | None = DescriptionField
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Display name",
+        examples=["My Workflow"],
+    )
+    description: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="Optional description",
+        examples=["This workflow processes incoming data"],
+    )
     config: dict[str, Any] = Field(
         default_factory=dict,
         description="Configuration object (JSON)",
@@ -357,7 +376,13 @@ class WorkflowUpdate(BaseSchema):
     Requires version for optimistic locking.
     """
 
-    name: str | None = OptionalNameField
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=255,
+        description="Display name",
+        examples=["My Workflow"],
+    )
     description: str | None = Field(
         default=None,
         max_length=2000,
@@ -375,7 +400,12 @@ class WorkflowUpdate(BaseSchema):
         default=None,
         description="Whether the workflow is active",
     )
-    version: int = VersionField
+    version: int = Field(
+        ...,
+        ge=1,
+        description="Version number for optimistic locking",
+        examples=[1],
+    )
 
 
 class WorkflowResponse(BaseResponse):
@@ -525,7 +555,12 @@ class WorkflowGraphUpdate(BaseSchema):
     Replaces all nodes and edges with the provided data.
     """
 
-    version: int = VersionField
+    version: int = Field(
+        ...,
+        ge=1,
+        description="Version number for optimistic locking",
+        examples=[1],
+    )
     nodes: list[NodeCreate] = Field(
         default_factory=list,
         max_length=100,

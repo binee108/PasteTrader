@@ -9,14 +9,15 @@ for common database patterns like timestamps and soft deletion.
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
-from sqlalchemy import DateTime, func
+from sqlalchemy import DateTime, Dialect, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
 from sqlalchemy.types import CHAR, TypeDecorator
 
 
-class GUID(TypeDecorator):
+class GUID(TypeDecorator[uuid.UUID]):
     """Platform-independent GUID type.
 
     Uses PostgreSQL's UUID type, otherwise uses CHAR(36), storing as
@@ -26,19 +27,28 @@ class GUID(TypeDecorator):
     impl = CHAR
     cache_ok = True
 
-    def load_dialect_impl(self, dialect):
+    def load_dialect_impl(self, dialect: Dialect) -> Any:  # TypeEngine[uuid.UUID]
         if dialect.name == "postgresql":
             return dialect.type_descriptor(PG_UUID(as_uuid=True))
         return dialect.type_descriptor(CHAR(36))
 
-    def process_bind_param(self, value, dialect):
-        if value is None or dialect.name == "postgresql":
-            return value
+    def process_bind_param(
+        self, value: uuid.UUID | None, dialect: Dialect
+    ) -> str | None:
+        if value is None:
+            return None
+        if dialect.name == "postgresql":
+            # PostgreSQL handles UUID natively
+            return None
         if isinstance(value, uuid.UUID):
             return str(value)
         return str(uuid.UUID(value))
 
-    def process_result_value(self, value, dialect):
+    def process_result_value(
+        self,
+        value: str | None,
+        dialect: Dialect,  # noqa: ARG002 - Part of SQLAlchemy API
+    ) -> uuid.UUID | None:
         if value is None:
             return value
         if not isinstance(value, uuid.UUID):
