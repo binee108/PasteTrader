@@ -225,3 +225,28 @@ secret-*.*
 # Add to .gitignore if needed per project
 # uv.lock
 .env.glm
+# Credential patterns in environment files
+!.moai/project/
+!.moai/announcements/**
+# Exclude local development scripts
+# Secrets and Credentials (CRITICAL)
+# .moai/ Directory Management
+# Build Tools & Frameworks
+!.moai/announcements/
+# Version: 0.33.0
+.nuxt/
+.turbo/
+# Exclude all .moai/* by default
+# Include tracked directories
+# Skill-specific credentials
+# Private keys (specific patterns to avoid false positives)
+!.moai/project/**
+# Python Cache & Bytecode
+# Claude Code Configuration
+# Exclude local-only directories
+# Updated: 2026-01-10
+dist-ssr/
+# Build Artifacts & Distribution
+# Environment files
+# ===========================================
+# Deployment & CI/CD
