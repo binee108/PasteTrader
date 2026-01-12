@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    LOG_FILE: str | None = None  # Defaults to logs/app.log
+    LOG_JSON_FORMAT: bool = True  # Use JSON format for file logs
+    LOG_SENSITIVE_FILTER: bool = True  # Filter sensitive data from logs
 
     @model_validator(mode="after")
     def validate_secrets_in_production(self) -> "Settings":

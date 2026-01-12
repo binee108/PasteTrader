@@ -13,6 +13,13 @@ Features:
 - Timing-safe password verification to prevent timing attacks
 - Password complexity validation
 - Performance-optimized implementation (completes within 500ms)
+- Comprehensive security event logging
+
+Logging:
+    - Logs password hashing operations (without sensitive data)
+    - Logs password verification operations
+    - Logs security violation attempts
+    - Logs password complexity validation failures
 """
 
 from __future__ import annotations
@@ -20,7 +27,7 @@ from __future__ import annotations
 import re
 from time import perf_counter
 
-from passlib.context import CryptContext
+from passlib.context import CryptContext  # type: ignore[import-untyped]
 
 
 class PasswordComplexityError(ValueError):
@@ -70,13 +77,50 @@ def hash_password(password: str) -> str:
 
     Performance:
         Completes within 500ms on modern hardware (AC-031)
+
+    Logging:
+        Logs password hashing operations without exposing sensitive data
     """
+    from app.core.logging import get_logger
+
+    logger = get_logger(__name__)
+
+    # Log password hashing operation (without sensitive data)
+    password_length = len(password)
+    truncated = False
+
     # Bcrypt has a 72-byte limit, truncate if necessary
     password_bytes = password.encode("utf-8")
     if len(password_bytes) > 72:
         password = password_bytes[:72].decode("utf-8", errors="ignore")
+        truncated = True
 
-    return pwd_context.hash(password)
+    logger.debug(
+        "Password hashing operation",
+        extra={
+            "context": {
+                "action": "hash_password",
+                "password_length": password_length,
+                "truncated": truncated,
+            }
+        },
+    )
+
+    hashed: str = pwd_context.hash(password)
+
+    logger.info(
+        "Password hashed successfully",
+        extra={
+            "context": {
+                "action": "hash_password",
+                "hash_prefix": hashed[:7],  # Only log algorithm identifier
+                "hash_length": len(hashed),
+                "status": "success",
+            }
+        },
+    )
+
+    return hashed
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -112,15 +156,68 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
     Performance:
         Completes within 500ms on modern hardware (AC-031)
+
+    Logging:
+        Logs password verification operations without exposing sensitive data
     """
+    from app.core.logging import get_logger
+
+    logger = get_logger(__name__)
+
+    # Log password verification operation (without sensitive data)
+    password_length = len(plain_password)
+    truncated = False
+
     # Bcrypt has a 72-byte limit, truncate if necessary
     password_bytes = plain_password.encode("utf-8")
     if len(password_bytes) > 72:
         plain_password = password_bytes[:72].decode("utf-8", errors="ignore")
+        truncated = True
+
+    # Validate hash format
+    valid_hash_format = (
+        hashed_password.startswith("$2b$12$") if hashed_password else False
+    )
+
+    logger.debug(
+        "Password verification operation",
+        extra={
+            "context": {
+                "action": "verify_password",
+                "password_length": password_length,
+                "truncated": truncated,
+                "valid_hash_format": valid_hash_format,
+            }
+        },
+    )
 
     try:
-        return pwd_context.verify(plain_password, hashed_password)
-    except Exception:
+        result: bool = pwd_context.verify(plain_password, hashed_password)
+
+        logger.info(
+            "Password verification completed",
+            extra={
+                "context": {
+                    "action": "verify_password",
+                    "result": result,
+                    "status": "success",
+                }
+            },
+        )
+
+        return result
+    except Exception as e:
+        # Log verification error (security event)
+        logger.warning(
+            "Password verification failed with exception",
+            extra={
+                "context": {
+                    "action": "verify_password",
+                    "error_type": type(e).__name__,
+                    "status": "failed",
+                }
+            },
+        )
         # Return False for any error (invalid hash format, etc.)
         # This prevents information leakage about password validity
         return False
@@ -166,11 +263,19 @@ def is_password_complex_enough(
         - Checking against common password dictionaries
         - Preventing sequential/repeated characters
         - Checking for personal information (email, name, etc.)
+
+    Logging:
+        Logs password complexity validation failures for security monitoring
     """
+    from app.core.logging import get_logger
+
+    logger = get_logger(__name__)
+
     errors = []
+    password_length = len(password)
 
     # Check minimum length
-    if len(password) < min_length:
+    if password_length < min_length:
         errors.append(f"at least {min_length} characters")
 
     # Check for lowercase letter
@@ -190,10 +295,35 @@ def is_password_complex_enough(
         errors.append("at least one special character")
 
     if errors:
+        # Log password complexity validation failure
+        logger.warning(
+            "Password complexity validation failed",
+            extra={
+                "context": {
+                    "action": "password_complexity_check",
+                    "status": "failed",
+                    "password_length": password_length,
+                    "required_length": min_length,
+                    "missing_requirements": len(errors),
+                }
+            },
+        )
+
         if raise_error:
             error_msg = f"Password must contain {', '.join(errors)}"
             raise PasswordComplexityError(error_msg)
         return False
+
+    logger.debug(
+        "Password complexity validation passed",
+        extra={
+            "context": {
+                "action": "password_complexity_check",
+                "status": "passed",
+                "password_length": password_length,
+            }
+        },
+    )
 
     return True
 
@@ -244,8 +374,8 @@ def benchmark_hash_performance(iterations: int = 10) -> dict[str, float]:
 
 __all__ = [
     "PasswordComplexityError",
-    "hash_password",
-    "verify_password",
-    "is_password_complex_enough",
     "benchmark_hash_performance",
+    "hash_password",
+    "is_password_complex_enough",
+    "verify_password",
 ]

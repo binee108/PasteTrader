@@ -16,10 +16,10 @@ from app.core.security import (
 )
 
 __all__ = [
-    "settings",
     "PasswordComplexityError",
-    "hash_password",
-    "verify_password",
-    "is_password_complex_enough",
     "benchmark_hash_performance",
+    "hash_password",
+    "is_password_complex_enough",
+    "settings",
+    "verify_password",
 ]

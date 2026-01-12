@@ -429,9 +429,10 @@ class LogContext:
             record = self.old_factory(*args, **kwargs)
             # Add context attribute dynamically
             if not hasattr(record, "context"):
-                record.context = {}
+                record.context = self.context.copy()
             else:
-                record.context.update(self.context)
+                # Merge existing context with new context
+                record.context = {**record.context, **self.context}
             return record
 
         logging.setLogRecordFactory(record_factory)
