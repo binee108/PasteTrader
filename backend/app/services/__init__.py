@@ -8,6 +8,7 @@ from app.services.execution_service import (
     NodeExecutionService,
     WorkflowExecutionService,
 )
+from app.services.user_service import UserService
 from app.services.workflow_service import (
     DAGValidationError,
     EdgeNotFoundError,
@@ -38,4 +39,6 @@ __all__ = [
     "WorkflowNotFoundError",
     "WorkflowService",
     "WorkflowServiceError",
+    # User Services
+    "UserService",
 ]
