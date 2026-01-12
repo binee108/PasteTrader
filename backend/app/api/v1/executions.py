@@ -590,7 +590,7 @@ async def list_execution_logs(
 )
 async def list_node_execution_logs(
     db: DBSession,
-    execution_id: ExecutionIdPath,
+    execution_id: ExecutionIdPath,  # noqa: ARG001 - Path parameter for consistency with API spec
     node_execution_id: NodeExecutionIdPath,
     pagination: Pagination,
     filters: LogFilters,
