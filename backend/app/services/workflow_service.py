@@ -93,23 +93,52 @@ class WorkflowService:
         except Exception as e:
             raise WorkflowServiceError(f"Failed to create workflow: {e}") from e
 
-    async def get(self, workflow_id: UUID) -> Workflow | None:
-        """Get a workflow by ID."""
-        result = await self.db.execute(
-            select(Workflow).where(Workflow.id == workflow_id)
-        )
+    async def get(
+        self, workflow_id: UUID, include_deleted: bool = False
+    ) -> Workflow | None:
+        """Get a workflow by ID.
+
+        Args:
+            workflow_id: UUID of the workflow to retrieve.
+            include_deleted: If True, include soft-deleted workflows.
+
+        Returns:
+            The Workflow if found, None otherwise.
+        """
+        query = select(Workflow).where(Workflow.id == workflow_id)
+
+        if not include_deleted:
+            query = query.where(Workflow.deleted_at.is_(None))
+
+        result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_with_nodes(self, workflow_id: UUID) -> Workflow:
-        """Get a workflow with nodes and edges preloaded."""
-        result = await self.db.execute(
-            select(Workflow)
-            .where(Workflow.id == workflow_id)
-            .options(
-                selectinload(Workflow.nodes),
-                selectinload(Workflow.edges),
-            )
+    async def get_with_nodes(
+        self, workflow_id: UUID, include_deleted: bool = False
+    ) -> Workflow:
+        """Get a workflow with nodes and edges preloaded.
+
+        Args:
+            workflow_id: UUID of the workflow to retrieve.
+            include_deleted: If True, include soft-deleted workflows.
+
+        Returns:
+            The Workflow with nodes and edges loaded.
+
+        Raises:
+            WorkflowNotFoundError: If workflow not found.
+        """
+        query = select(Workflow).where(Workflow.id == workflow_id)
+
+        if not include_deleted:
+            query = query.where(Workflow.deleted_at.is_(None))
+
+        query = query.options(
+            selectinload(Workflow.nodes),
+            selectinload(Workflow.edges),
         )
+
+        result = await self.db.execute(query)
         workflow = result.scalar_one_or_none()
         if workflow is None:
             raise WorkflowNotFoundError(f"Workflow {workflow_id} not found")
@@ -121,12 +150,27 @@ class WorkflowService:
         skip: int = 0,
         limit: int = 20,
         is_active: bool | None = None,
+        include_deleted: bool = False,
     ) -> list[Workflow]:
-        """List workflows with pagination and filtering."""
+        """List workflows with pagination and filtering.
+
+        Args:
+            owner_id: UUID of the workflow owner.
+            skip: Number of records to skip.
+            limit: Maximum number of records to return.
+            is_active: Optional filter by active status.
+            include_deleted: If True, include soft-deleted workflows.
+
+        Returns:
+            List of Workflow records.
+        """
         query = select(Workflow).where(Workflow.owner_id == owner_id)
 
         if is_active is not None:
             query = query.where(Workflow.is_active == is_active)
+
+        if not include_deleted:
+            query = query.where(Workflow.deleted_at.is_(None))
 
         query = query.offset(skip).limit(limit).order_by(Workflow.created_at.desc())
 
@@ -137,12 +181,25 @@ class WorkflowService:
         self,
         owner_id: UUID,
         is_active: bool | None = None,
+        include_deleted: bool = False,
     ) -> int:
-        """Count workflows with optional filtering."""
+        """Count workflows with optional filtering.
+
+        Args:
+            owner_id: UUID of the workflow owner.
+            is_active: Optional filter by active status.
+            include_deleted: If True, include soft-deleted workflows.
+
+        Returns:
+            Count of matching workflows.
+        """
         query = select(func.count()).where(Workflow.owner_id == owner_id)
 
         if is_active is not None:
             query = query.where(Workflow.is_active == is_active)
+
+        if not include_deleted:
+            query = query.where(Workflow.deleted_at.is_(None))
 
         result = await self.db.scalar(query)
         return result or 0
