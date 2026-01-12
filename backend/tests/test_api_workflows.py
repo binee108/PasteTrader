@@ -686,11 +686,12 @@ class TestNodeEndpointsMock:
         node_id = uuid4()
 
         # Mock WorkflowService to return a workflow, but NodeService returns None
-        with patch(
-            "app.api.v1.workflows.WorkflowService"
-        ) as mock_workflow_service_class, patch(
-            "app.api.v1.workflows.NodeService"
-        ) as mock_node_service_class:
+        with (
+            patch(
+                "app.api.v1.workflows.WorkflowService"
+            ) as mock_workflow_service_class,
+            patch("app.api.v1.workflows.NodeService") as mock_node_service_class,
+        ):
             # Workflow exists
             mock_workflow = MagicMock()
             mock_workflow.id = workflow_id
@@ -721,11 +722,12 @@ class TestNodeEndpointsMock:
         other_workflow_id = uuid4()
         node_id = uuid4()
 
-        with patch(
-            "app.api.v1.workflows.WorkflowService"
-        ) as mock_workflow_service_class, patch(
-            "app.api.v1.workflows.NodeService"
-        ) as mock_node_service_class:
+        with (
+            patch(
+                "app.api.v1.workflows.WorkflowService"
+            ) as mock_workflow_service_class,
+            patch("app.api.v1.workflows.NodeService") as mock_node_service_class,
+        ):
             # Workflow exists
             mock_workflow = MagicMock()
             mock_workflow.id = workflow_id
@@ -1227,9 +1229,7 @@ class TestWorkflowCRUDErrorsMocked:
     # =========================================================================
 
     @pytest.mark.asyncio
-    async def test_list_workflows_database_error_mock(
-        self, async_client: AsyncClient, db_session
-    ):
+    async def test_list_workflows_database_error_mock(self, async_client: AsyncClient):
         """Test list workflows returns 500 on database error.
 
         Tests lines 129-133 in workflows.py where generic Exception
@@ -1245,9 +1245,7 @@ class TestWorkflowCRUDErrorsMocked:
             assert "Database connection failed" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_list_workflows_count_error_mock(
-        self, async_client: AsyncClient, db_session
-    ):
+    async def test_list_workflows_count_error_mock(self, async_client: AsyncClient):
         """Test list workflows returns 500 when count() fails.
 
         Tests lines 129-133 in workflows.py where Exception during
@@ -1269,7 +1267,7 @@ class TestWorkflowCRUDErrorsMocked:
 
     @pytest.mark.asyncio
     async def test_update_workflow_version_conflict_mock(
-        self, async_client: AsyncClient, db_session
+        self, async_client: AsyncClient
     ):
         """Test update workflow returns 409 on VersionConflictError.
 
@@ -1294,9 +1292,7 @@ class TestWorkflowCRUDErrorsMocked:
             assert "Version conflict" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_update_workflow_not_found_mock(
-        self, async_client: AsyncClient, db_session
-    ):
+    async def test_update_workflow_not_found_mock(self, async_client: AsyncClient):
         """Test update workflow returns 404 on WorkflowNotFoundError.
 
         Tests lines 280-284 in workflows.py where WorkflowNotFoundError
@@ -1318,9 +1314,7 @@ class TestWorkflowCRUDErrorsMocked:
             assert "Workflow not found" in response.json()["detail"]
 
     @pytest.mark.asyncio
-    async def test_update_workflow_internal_error_mock(
-        self, async_client: AsyncClient, db_session
-    ):
+    async def test_update_workflow_internal_error_mock(self, async_client: AsyncClient):
         """Test update workflow returns 500 on unexpected error.
 
         Tests lines 290-294 in workflows.py where generic Exception
@@ -1344,9 +1338,7 @@ class TestWorkflowCRUDErrorsMocked:
     # =========================================================================
 
     @pytest.mark.asyncio
-    async def test_get_workflow_full_not_found_mock(
-        self, async_client: AsyncClient, db_session
-    ):
+    async def test_get_workflow_full_not_found_mock(self, async_client: AsyncClient):
         """Test get workflow full returns 404 on WorkflowNotFoundError.
 
         Tests lines 239-243 in workflows.py where WorkflowNotFoundError
@@ -1368,7 +1360,7 @@ class TestWorkflowCRUDErrorsMocked:
 
     @pytest.mark.asyncio
     async def test_get_workflow_full_internal_error_mock(
-        self, async_client: AsyncClient, db_session
+        self, async_client: AsyncClient
     ):
         """Test get workflow full returns 500 on unexpected error.
 
@@ -1391,7 +1383,7 @@ class TestWorkflowCRUDErrorsMocked:
 
     @pytest.mark.asyncio
     async def test_create_node_workflow_not_found_mock(
-        self, async_client: AsyncClient, db_session, sample_node_data
+        self, async_client: AsyncClient, sample_node_data
     ):
         """Test create node returns 404 when workflow not found.
 
@@ -1414,7 +1406,7 @@ class TestWorkflowCRUDErrorsMocked:
 
     @pytest.mark.asyncio
     async def test_create_node_invalid_reference_mock(
-        self, async_client: AsyncClient, db_session, sample_node_data
+        self, async_client: AsyncClient, sample_node_data
     ):
         """Test create node returns 400 on InvalidNodeReferenceError.
 
@@ -1437,7 +1429,7 @@ class TestWorkflowCRUDErrorsMocked:
 
     @pytest.mark.asyncio
     async def test_create_node_internal_error_mock(
-        self, async_client: AsyncClient, db_session, sample_node_data
+        self, async_client: AsyncClient, sample_node_data
     ):
         """Test create node returns 500 on unexpected error.
 
@@ -1489,8 +1481,8 @@ class TestGraphUpdateMockBased:
         """
         workflow_id = uuid4()
 
-        with patch("app.api.v1.workflows.WorkflowService") as MockService:
-            mock_instance = MockService.return_value
+        with patch("app.api.v1.workflows.WorkflowService") as mock_service:
+            mock_instance = mock_service.return_value
             mock_instance.get = AsyncMock(return_value=None)
 
             response = await async_client.put(
@@ -1519,8 +1511,8 @@ class TestGraphUpdateMockBased:
         mock_workflow.nodes = []
         mock_workflow.edges = []
 
-        with patch("app.api.v1.workflows.WorkflowService") as MockService:
-            mock_instance = MockService.return_value
+        with patch("app.api.v1.workflows.WorkflowService") as mock_service:
+            mock_instance = mock_service.return_value
             mock_instance.get = AsyncMock(return_value=mock_workflow)
 
             # Send request with version 4 (mismatch)
@@ -1560,8 +1552,8 @@ class TestGraphUpdateMockBased:
         node2_id = str(uuid4())
 
         # Patch to raise DAGValidationError during processing
-        with patch("app.api.v1.workflows.WorkflowService") as MockService:
-            mock_instance = MockService.return_value
+        with patch("app.api.v1.workflows.WorkflowService") as mock_service:
+            mock_instance = mock_service.return_value
             mock_instance.get = AsyncMock(return_value=mock_workflow)
             mock_instance.get_with_nodes = AsyncMock(
                 side_effect=DAGValidationError("Cycle detected in graph")
@@ -1615,8 +1607,8 @@ class TestGraphUpdateMockBased:
         mock_workflow.nodes = []
         mock_workflow.edges = []
 
-        with patch("app.api.v1.workflows.WorkflowService") as MockService:
-            mock_instance = MockService.return_value
+        with patch("app.api.v1.workflows.WorkflowService") as mock_service:
+            mock_instance = mock_service.return_value
             mock_instance.get = AsyncMock(return_value=mock_workflow)
             mock_instance.get_with_nodes = AsyncMock(
                 side_effect=InvalidNodeReferenceError("Invalid tool_id reference")
@@ -1658,8 +1650,8 @@ class TestGraphUpdateMockBased:
         workflow_id = create_response.json()["id"]
         version = create_response.json()["version"]
 
-        with patch("app.api.v1.workflows.WorkflowService") as MockService:
-            mock_instance = MockService.return_value
+        with patch("app.api.v1.workflows.WorkflowService") as mock_service:
+            mock_instance = mock_service.return_value
             mock_instance.get = AsyncMock(
                 side_effect=Exception("Unexpected database error")
             )
@@ -1695,8 +1687,8 @@ class TestGraphUpdateMockBased:
         mock_workflow.id = workflow_id
         mock_workflow.version = version
 
-        with patch("app.api.v1.workflows.WorkflowService") as MockService:
-            mock_instance = MockService.return_value
+        with patch("app.api.v1.workflows.WorkflowService") as mock_service:
+            mock_instance = mock_service.return_value
             mock_instance.get = AsyncMock(return_value=mock_workflow)
             # Simulate HTTPException being raised in get_with_nodes
             mock_instance.get_with_nodes = AsyncMock(
@@ -1748,7 +1740,7 @@ class TestGraphUpdateMockBased:
             "/api/v1/workflows/", json=sample_workflow_data
         )
         workflow_id = create_response.json()["id"]
-        version = create_response.json()["version"]
+        create_response.json()["version"]
 
         # Add initial node
         await async_client.post(

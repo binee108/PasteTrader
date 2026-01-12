@@ -200,7 +200,7 @@ class TestNodeErrors:
 
     @pytest.mark.asyncio
     async def test_update_node_workflow_mismatch(
-        self, async_client: AsyncClient, workflow_id: str, node_id: str
+        self, async_client: AsyncClient, node_id: str
     ):
         """Test update node from different workflow returns 404."""
         update_data = {"name": "Updated"}
@@ -223,7 +223,7 @@ class TestNodeErrors:
 
     @pytest.mark.asyncio
     async def test_delete_node_wrong_workflow(
-        self, async_client: AsyncClient, workflow_id: str, node_id: str
+        self, async_client: AsyncClient, node_id: str
     ):
         """Test delete node from different workflow returns 404."""
         response = await async_client.delete(
@@ -485,7 +485,7 @@ class TestEdgeErrors:
 
     @pytest.mark.asyncio
     async def test_delete_edge_wrong_workflow(
-        self, async_client: AsyncClient, workflow_with_nodes: tuple, edge_id: str
+        self, async_client: AsyncClient, edge_id: str
     ):
         """Test delete edge from different workflow returns 404."""
         response = await async_client.delete(

@@ -375,11 +375,11 @@ class TestNodeService:
 
             raise IntegrityError("INSERT INTO nodes", {}, Exception())
 
-        with patch.object(db_session, "flush", side_effect=mock_flush_integrity):
-            with pytest.raises(
-                InvalidNodeReferenceError, match="Invalid node reference"
-            ):
-                await NodeService(db_session).create(workflow.id, node_data)
+        with (
+            patch.object(db_session, "flush", side_effect=mock_flush_integrity),
+            pytest.raises(InvalidNodeReferenceError, match="Invalid node reference"),
+        ):
+            await NodeService(db_session).create(workflow.id, node_data)
 
     @pytest.mark.asyncio
     async def test_get_node_success(self, db_session, node_factory):
@@ -495,7 +495,7 @@ class TestNodeService:
             ]
         )
 
-        with pytest.raises(InvalidNodeReferenceError, match="Workflow .* not found"):
+        with pytest.raises(InvalidNodeReferenceError, match=r"Workflow .* not found"):
             await NodeService(db_session).batch_create(uuid4(), nodes_data)
 
     @pytest.mark.asyncio
@@ -613,11 +613,11 @@ class TestEdgeService:
 
             raise IntegrityError("INSERT INTO edges", {}, Exception())
 
-        with patch.object(db_session, "flush", side_effect=mock_flush_integrity):
-            with pytest.raises(
-                InvalidNodeReferenceError, match="Invalid edge reference"
-            ):
-                await EdgeService(db_session).create(workflow.id, edge_data)
+        with (
+            patch.object(db_session, "flush", side_effect=mock_flush_integrity),
+            pytest.raises(InvalidNodeReferenceError, match="Invalid edge reference"),
+        ):
+            await EdgeService(db_session).create(workflow.id, edge_data)
 
     @pytest.mark.asyncio
     async def test_create_edge_cycle_detection(
@@ -817,11 +817,11 @@ class TestEdgeService:
 
             raise IntegrityError("INSERT INTO edges", {}, Exception())
 
-        with patch.object(db_session, "flush", side_effect=mock_flush_integrity):
-            with pytest.raises(
-                InvalidNodeReferenceError, match="Invalid edge reference"
-            ):
-                await EdgeService(db_session).batch_create(workflow.id, edges_list)
+        with (
+            patch.object(db_session, "flush", side_effect=mock_flush_integrity),
+            pytest.raises(InvalidNodeReferenceError, match="Invalid edge reference"),
+        ):
+            await EdgeService(db_session).batch_create(workflow.id, edges_list)
 
     @pytest.mark.asyncio
     async def test_dag_validation_complex_cycle(

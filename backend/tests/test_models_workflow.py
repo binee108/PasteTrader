@@ -1309,7 +1309,7 @@ class TestEdgeModelBehavior:
         assert deleted_edge is None
 
     @pytest.mark.asyncio
-    async def test_edge_source_node_fk_cascade_schema(self, db_session) -> None:
+    async def test_edge_source_node_fk_cascade_schema(self) -> None:
         """Edge source_node_id FK should have ON DELETE CASCADE defined.
 
         This test verifies the schema definition. The actual CASCADE behavior
@@ -1334,7 +1334,7 @@ class TestEdgeModelBehavior:
         assert source_fk.ondelete == "CASCADE"
 
     @pytest.mark.asyncio
-    async def test_edge_target_node_fk_cascade_schema(self, db_session) -> None:
+    async def test_edge_target_node_fk_cascade_schema(self) -> None:
         """Edge target_node_id FK should have ON DELETE CASCADE defined.
 
         This test verifies the schema definition. The actual CASCADE behavior
