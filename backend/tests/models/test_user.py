@@ -280,3 +280,112 @@ class TestUserWorkflowRelationship:
         workflows = result.scalars().all()
         assert len(workflows) == 1
         assert workflows[0].owner_id == user.id
+
+
+class TestUserToolRelationship:
+    """Test user-tool relationship (SPEC-004 AC-004)."""
+
+    async def test_user_has_tools_relationship_attribute(self):
+        """Test that User model has tools relationship attribute."""
+        assert hasattr(User, "tools"), "User model should have 'tools' relationship"
+
+    async def test_user_can_own_multiple_tools(self, db_session):
+        """Test that user can own multiple tools."""
+        from sqlalchemy.orm import selectinload
+
+        from app.models.enums import ToolType
+        from app.models.tool import Tool
+
+        user = User(
+            email="test@example.com",
+            hashed_password="hash",
+        )
+        db_session.add(user)
+        await db_session.commit()
+        await db_session.refresh(user)
+
+        # Create multiple tools
+        tool1 = Tool(
+            owner_id=user.id,
+            name="Tool 1",
+            tool_type=ToolType.HTTP,
+        )
+        tool2 = Tool(
+            owner_id=user.id,
+            name="Tool 2",
+            tool_type=ToolType.MCP,
+        )
+        tool3 = Tool(
+            owner_id=user.id,
+            name="Tool 3",
+            tool_type=ToolType.PYTHON,
+        )
+
+        db_session.add_all([tool1, tool2, tool3])
+        await db_session.commit()
+
+        # Refresh user with tools loaded
+        result = await db_session.execute(
+            select(User).options(selectinload(User.tools)).where(User.id == user.id)
+        )
+        user = result.scalar_one()
+
+        # Check that user has 3 tools
+        assert len(user.tools) == 3
+        assert all(t.owner_id == user.id for t in user.tools)
+
+
+class TestUserAgentRelationship:
+    """Test user-agent relationship (SPEC-004 AC-005)."""
+
+    async def test_user_has_agents_relationship_attribute(self):
+        """Test that User model has agents relationship attribute."""
+        assert hasattr(User, "agents"), "User model should have 'agents' relationship"
+
+    async def test_user_can_own_multiple_agents(self, db_session):
+        """Test that user can own multiple agents."""
+        from sqlalchemy.orm import selectinload
+
+        from app.models.agent import Agent
+        from app.models.enums import ModelProvider
+
+        user = User(
+            email="test@example.com",
+            hashed_password="hash",
+        )
+        db_session.add(user)
+        await db_session.commit()
+        await db_session.refresh(user)
+
+        # Create multiple agents
+        agent1 = Agent(
+            owner_id=user.id,
+            name="Agent 1",
+            model_provider=ModelProvider.ANTHROPIC,
+            model_name="claude-3-opus-20240229",
+        )
+        agent2 = Agent(
+            owner_id=user.id,
+            name="Agent 2",
+            model_provider=ModelProvider.OPENAI,
+            model_name="gpt-4",
+        )
+        agent3 = Agent(
+            owner_id=user.id,
+            name="Agent 3",
+            model_provider=ModelProvider.GLM,
+            model_name="glm-4",
+        )
+
+        db_session.add_all([agent1, agent2, agent3])
+        await db_session.commit()
+
+        # Refresh user with agents loaded
+        result = await db_session.execute(
+            select(User).options(selectinload(User.agents)).where(User.id == user.id)
+        )
+        user = result.scalar_one()
+
+        # Check that user has 3 agents
+        assert len(user.agents) == 3
+        assert all(a.owner_id == user.id for a in user.agents)
