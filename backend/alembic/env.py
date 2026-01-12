@@ -2,12 +2,14 @@
 
 TAG: [SPEC-001] [DATABASE] [ALEMBIC]
 REQ: REQ-002 - Alembic Migration Setup
+REQ: REQ-007 - Migration Safety Enhancement
 
 This module configures Alembic to work with async SQLAlchemy
 and loads database URL from application settings.
 """
 
 import asyncio
+import os
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -57,6 +59,34 @@ def get_url() -> str:
     elif url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
     return url
+
+
+def check_production_safety() -> None:
+    """Prevent accidental production migrations.
+
+    Raises:
+        RuntimeError: If running in production without explicit confirmation.
+
+    Environment Variables:
+        ENVIRONMENT: Current environment (e.g., "production", "development")
+        CONFIRM_PRODUCTION_MIGRATION: Must be "true" to allow production migrations
+
+    Example:
+        To run migrations in production:
+        export ENVIRONMENT=production
+        export CONFIRM_PRODUCTION_MIGRATION=true
+        alembic upgrade head
+    """
+    env = os.getenv("ENVIRONMENT", "").lower()
+
+    if env == "production":
+        confirm = os.getenv("CONFIRM_PRODUCTION_MIGRATION", "").lower()
+        if confirm != "true":
+            raise RuntimeError(
+                "Production migration requires CONFIRM_PRODUCTION_MIGRATION=true. "
+                "This prevents accidental migrations to production database. "
+                "To proceed, set the environment variable and try again."
+            )
 
 
 def run_migrations_offline() -> None:
@@ -112,7 +142,12 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
+    """Run migrations in 'online' mode.
+
+    This function checks production safety before executing migrations
+    to prevent accidental changes to production databases.
+    """
+    check_production_safety()
     asyncio.run(run_async_migrations())
 
 
