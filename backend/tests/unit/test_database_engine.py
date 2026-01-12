@@ -346,10 +346,8 @@ class TestEnginePerformance:
     def test_engine_parameter_optimization(self):
         """Test that engine parameters are optimized for performance."""
         from app.core.config import settings
-        from app.db.session import engine
 
         # Pool configuration should be optimized
-        pool = engine.sync_engine.pool
 
         # Should have reasonable default sizes
         assert settings.DATABASE_POOL_SIZE >= 5  # Minimum for production

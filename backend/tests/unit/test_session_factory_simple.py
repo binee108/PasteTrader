@@ -173,7 +173,7 @@ class TestSessionFactoryBasic:
         assert callable(async_session)
 
         # Should be inspectable
-        assert hasattr(async_session, "__call__")
+        assert callable(async_session)
 
     def test_session_factory_documentation_interface(self):
         """Test session factory documentation and interface clarity."""
@@ -181,7 +181,7 @@ class TestSessionFactoryBasic:
 
         # Factory should have a clear interface
         assert callable(async_session)
-        assert hasattr(async_session, "__call__")
+        assert callable(async_session)
 
     def test_session_factory_compatibility_with_environment(self):
         """Test session factory compatibility with different environments."""

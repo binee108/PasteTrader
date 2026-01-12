@@ -7,7 +7,6 @@ Tests for email validation and normalization,
 following AC-008 to AC-011 acceptance criteria.
 """
 
-import pytest
 
 from app.utils.email import (
     is_valid_email_format,

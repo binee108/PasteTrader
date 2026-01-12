@@ -7,7 +7,6 @@ This test module verifies that services properly filter soft-deleted records
 and respect the include_deleted parameter.
 """
 
-from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
@@ -15,7 +14,10 @@ import pytest
 from app.models.agent import Agent
 from app.models.tool import Tool
 from app.models.workflow import Workflow
-from app.services.workflow_service import WorkflowService
+from app.services.workflow_service import (
+    WorkflowNotFoundError,
+    WorkflowService,
+)
 
 
 class TestWorkflowServiceSoftDelete:
@@ -89,7 +91,7 @@ class TestWorkflowServiceSoftDelete:
         db_session.add(workflow)
         await db_session.flush()
 
-        with pytest.raises(Exception):  # WorkflowNotFoundError
+        with pytest.raises(WorkflowNotFoundError, match="not found"):
             await WorkflowService(db_session).get_with_nodes(workflow.id)
 
     @pytest.mark.asyncio
@@ -239,7 +241,7 @@ class TestAgentModelSoftDelete:
     """Test suite for Agent model soft delete functionality."""
 
     @pytest.mark.asyncio
-    async def test_agent_soft_delete_mixin(self, db_session):
+    async def test_agent_soft_delete_mixin(self):
         """Test that Agent model properly supports soft delete."""
         from app.models.enums import ModelProvider
 
@@ -281,7 +283,7 @@ class TestToolModelSoftDelete:
     """Test suite for Tool model soft delete functionality."""
 
     @pytest.mark.asyncio
-    async def test_tool_soft_delete_mixin(self, db_session):
+    async def test_tool_soft_delete_mixin(self):
         """Test that Tool model properly supports soft delete."""
         from app.models.enums import ToolType
 
