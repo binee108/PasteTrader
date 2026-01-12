@@ -7,5 +7,19 @@ This package contains core functionality including:
 """
 
 from app.core.config import settings
+from app.core.security import (
+    PasswordComplexityError,
+    benchmark_hash_performance,
+    hash_password,
+    is_password_complex_enough,
+    verify_password,
+)
 
-__all__ = ["settings"]
+__all__ = [
+    "settings",
+    "PasswordComplexityError",
+    "hash_password",
+    "verify_password",
+    "is_password_complex_enough",
+    "benchmark_hash_performance",
+]
