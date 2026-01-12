@@ -13,10 +13,10 @@ import uuid
 from typing import Any
 
 from sqlalchemy import JSON, Boolean, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
+from app.models.base import GUID, Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 from app.models.enums import ToolType
 
 # Use JSONB for PostgreSQL, JSON for other databases (like SQLite for testing)
@@ -51,7 +51,7 @@ class Tool(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
 
     # Foreign key to users table (string reference for forward compatibility)
     owner_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("users.id"),
         nullable=False,
         index=True,

@@ -39,7 +39,9 @@ class Settings(BaseSettings):
         """Parse ALLOWED_ORIGINS from comma-separated string or list."""
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+        if isinstance(v, list):
+            return v
+        return ["http://localhost:3000"]
 
     # Database
     DATABASE_URL: PostgresDsn | None = None

@@ -12,12 +12,10 @@ REQ: REQ-009 - Self-Loop Prevention
 """
 
 import uuid
-from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import String, inspect
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import String
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -387,13 +385,15 @@ def get_mock_classes():
     global _test_models_defined, _MockUserClass, _MockToolClass, _MockAgentClass
 
     if not _test_models_defined:
+        from typing import ClassVar
+
         from app.models.base import Base, UUIDMixin
 
-        class User(UUIDMixin, Base):
+        class TestUserWorkflow(UUIDMixin, Base):
             """Mock User model for testing FK references."""
 
             __tablename__ = "users"
-            __table_args__ = {"extend_existing": True}
+            __table_args__: ClassVar[dict[str, bool]] = {"extend_existing": True}
 
             name: Mapped[str] = mapped_column(String(100), nullable=False)
 
@@ -401,7 +401,7 @@ def get_mock_classes():
             """Mock Tool model for testing FK references."""
 
             __tablename__ = "tools"
-            __table_args__ = {"extend_existing": True}
+            __table_args__: ClassVar[dict[str, bool]] = {"extend_existing": True}
 
             name: Mapped[str] = mapped_column(String(100), nullable=False)
 
@@ -409,11 +409,11 @@ def get_mock_classes():
             """Mock Agent model for testing FK references."""
 
             __tablename__ = "agents"
-            __table_args__ = {"extend_existing": True}
+            __table_args__: ClassVar[dict[str, bool]] = {"extend_existing": True}
 
             name: Mapped[str] = mapped_column(String(100), nullable=False)
 
-        _MockUserClass = User
+        _MockUserClass = TestUserWorkflow
         _MockToolClass = Tool
         _MockAgentClass = Agent
         _test_models_defined = True
@@ -424,7 +424,6 @@ def get_mock_classes():
 @pytest_asyncio.fixture
 async def db_session():
     """Create async session for testing with tables created."""
-    from app.models.workflow import Edge, Node, Workflow
 
     # Get mock classes to satisfy FK constraints
     get_mock_classes()
@@ -971,8 +970,9 @@ class TestNodeModelBehavior:
     @pytest.mark.asyncio
     async def test_node_cascade_delete_with_workflow(self, db_session) -> None:
         """Nodes should be deleted when parent workflow is deleted via ORM cascade."""
+        from sqlalchemy import text
+
         from app.models.workflow import Node, Workflow
-        from sqlalchemy import select, text
 
         workflow = Workflow(owner_id=uuid.uuid4(), name="Test Workflow")
         db_session.add(workflow)
@@ -1268,8 +1268,9 @@ class TestEdgeModelBehavior:
     @pytest.mark.asyncio
     async def test_edge_cascade_delete_with_workflow(self, db_session) -> None:
         """Edges should be deleted when parent workflow is deleted via ORM cascade."""
-        from app.models.workflow import Edge, Node, Workflow
         from sqlalchemy import text
+
+        from app.models.workflow import Edge, Node, Workflow
 
         workflow = Workflow(owner_id=uuid.uuid4(), name="Test Workflow")
         db_session.add(workflow)
@@ -1314,8 +1315,8 @@ class TestEdgeModelBehavior:
         This test verifies the schema definition. The actual CASCADE behavior
         is enforced by PostgreSQL; SQLite may not enforce FKs by default.
         """
+
         from app.models.workflow import Edge
-        from sqlalchemy import inspect as sa_inspect
 
         # Verify Edge model has source_node_id attribute
         assert hasattr(Edge, "source_node_id")

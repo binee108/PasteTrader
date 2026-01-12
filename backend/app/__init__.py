@@ -8,6 +8,6 @@ from app import db
 __version__ = "0.1.0"
 
 __all__ = [
-    "db",
     "__version__",
+    "db",
 ]

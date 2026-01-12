@@ -25,6 +25,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Enum as SQLEnum,
     Float,
     ForeignKey,
     Integer,
@@ -33,14 +34,15 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
+from app.models.base import GUID, Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 from app.models.enums import NodeType
 
 if TYPE_CHECKING:
     from app.models.execution import WorkflowExecution
+    from app.models.user import User
 
 # Use JSONB for PostgreSQL, JSON for other databases (like SQLite for testing)
 JSONType = JSON().with_variant(JSONB(), "postgresql")
@@ -66,16 +68,23 @@ class Workflow(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
         deleted_at: Soft delete timestamp (from SoftDeleteMixin)
         nodes: Relationship to Node models
         edges: Relationship to Edge models
+        owner: Relationship to the User who owns this workflow
     """
 
     __tablename__ = "workflows"
 
     # Foreign key to users table (string reference for forward compatibility)
     owner_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("users.id"),
         nullable=False,
         index=True,
+    )
+
+    # Relationship to owner User
+    owner: Mapped[User] = relationship(
+        "User",
+        back_populates="workflows",
     )
 
     # Basic information
@@ -124,14 +133,12 @@ class Workflow(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
         "Node",
         back_populates="workflow",
         cascade="all, delete-orphan",
-        passive_deletes=True,
     )
 
     edges: Mapped[list[Edge]] = relationship(
         "Edge",
         back_populates="workflow",
         cascade="all, delete-orphan",
-        passive_deletes=True,
     )
 
     # Relationship to WorkflowExecution
@@ -175,7 +182,7 @@ class Node(UUIDMixin, TimestampMixin, Base):
 
     # Foreign key to workflows table with CASCADE delete
     workflow_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("workflows.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -189,7 +196,11 @@ class Node(UUIDMixin, TimestampMixin, Base):
 
     # Node type enum
     node_type: Mapped[NodeType] = mapped_column(
-        String(50),
+        SQLEnum(
+            NodeType,
+            values_callable=lambda x: [e.value for e in x],
+            create_constraint=False,
+        ),
         nullable=False,
     )
 
@@ -228,13 +239,13 @@ class Node(UUIDMixin, TimestampMixin, Base):
 
     # Foreign keys to tools and agents (nullable)
     tool_id: Mapped[uuid.UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("tools.id"),
         nullable=True,
     )
 
     agent_id: Mapped[uuid.UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("agents.id"),
         nullable=True,
     )
@@ -291,7 +302,7 @@ class Edge(UUIDMixin, Base):
 
     # Foreign key to workflows table with CASCADE delete
     workflow_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("workflows.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -299,14 +310,14 @@ class Edge(UUIDMixin, Base):
 
     # Foreign keys to nodes with CASCADE delete
     source_node_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("nodes.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
     target_node_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("nodes.id", ondelete="CASCADE"),
         nullable=False,
         index=True,

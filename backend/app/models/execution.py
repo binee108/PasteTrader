@@ -21,11 +21,11 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy import DateTime, Enum as SQLEnum, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin, UUIDMixin
+from app.models.base import GUID, Base, TimestampMixin, UUIDMixin
 from app.models.enums import ExecutionStatus, LogLevel, TriggerType
 
 if TYPE_CHECKING:
@@ -64,7 +64,7 @@ class WorkflowExecution(UUIDMixin, TimestampMixin, Base):
 
     # Foreign key to workflows table
     workflow_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("workflows.id"),
         nullable=False,
         index=True,
@@ -72,13 +72,21 @@ class WorkflowExecution(UUIDMixin, TimestampMixin, Base):
 
     # Trigger type
     trigger_type: Mapped[TriggerType] = mapped_column(
-        String(50),
+        SQLEnum(
+            TriggerType,
+            values_callable=lambda x: [e.value for e in x],
+            create_constraint=False,
+        ),
         nullable=False,
     )
 
     # Execution status with default
     status: Mapped[ExecutionStatus] = mapped_column(
-        String(50),
+        SQLEnum(
+            ExecutionStatus,
+            values_callable=lambda x: [e.value for e in x],
+            create_constraint=False,
+        ),
         nullable=False,
         default=ExecutionStatus.PENDING,
         server_default="pending",
@@ -139,7 +147,6 @@ class WorkflowExecution(UUIDMixin, TimestampMixin, Base):
         "NodeExecution",
         back_populates="workflow_execution",
         cascade="all, delete-orphan",
-        passive_deletes=True,
         order_by="NodeExecution.execution_order",
     )
 
@@ -147,7 +154,6 @@ class WorkflowExecution(UUIDMixin, TimestampMixin, Base):
         "ExecutionLog",
         back_populates="workflow_execution",
         cascade="all, delete-orphan",
-        passive_deletes=True,
         order_by="ExecutionLog.timestamp",
         foreign_keys="ExecutionLog.workflow_execution_id",
     )
@@ -280,7 +286,7 @@ class NodeExecution(UUIDMixin, TimestampMixin, Base):
 
     # Foreign key to workflow_executions table with CASCADE delete
     workflow_execution_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("workflow_executions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -288,7 +294,7 @@ class NodeExecution(UUIDMixin, TimestampMixin, Base):
 
     # Foreign key to nodes table
     node_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("nodes.id"),
         nullable=False,
         index=True,
@@ -296,7 +302,11 @@ class NodeExecution(UUIDMixin, TimestampMixin, Base):
 
     # Execution status with default
     status: Mapped[ExecutionStatus] = mapped_column(
-        String(50),
+        SQLEnum(
+            ExecutionStatus,
+            values_callable=lambda x: [e.value for e in x],
+            create_constraint=False,
+        ),
         nullable=False,
         default=ExecutionStatus.PENDING,
         server_default="pending",
@@ -362,7 +372,6 @@ class NodeExecution(UUIDMixin, TimestampMixin, Base):
         "ExecutionLog",
         back_populates="node_execution",
         cascade="all, delete-orphan",
-        passive_deletes=True,
         order_by="ExecutionLog.timestamp",
         foreign_keys="ExecutionLog.node_execution_id",
     )
@@ -428,7 +437,7 @@ class ExecutionLog(UUIDMixin, Base):
 
     # Foreign key to workflow_executions table with CASCADE delete
     workflow_execution_id: Mapped[uuid.UUID] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("workflow_executions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
@@ -436,7 +445,7 @@ class ExecutionLog(UUIDMixin, Base):
 
     # Foreign key to node_executions table with CASCADE delete (nullable)
     node_execution_id: Mapped[uuid.UUID | None] = mapped_column(
-        PG_UUID(as_uuid=True),
+        GUID(),
         ForeignKey("node_executions.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
@@ -444,7 +453,11 @@ class ExecutionLog(UUIDMixin, Base):
 
     # Log level
     level: Mapped[LogLevel] = mapped_column(
-        String(20),
+        SQLEnum(
+            LogLevel,
+            values_callable=lambda x: [e.value for e in x],
+            create_constraint=False,
+        ),
         nullable=False,
     )
 

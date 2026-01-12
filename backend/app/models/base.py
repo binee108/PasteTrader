@@ -13,6 +13,37 @@ from datetime import UTC, datetime
 from sqlalchemy import DateTime, func
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, declared_attr, mapped_column
+from sqlalchemy.types import CHAR, TypeDecorator
+
+
+class GUID(TypeDecorator):
+    """Platform-independent GUID type.
+
+    Uses PostgreSQL's UUID type, otherwise uses CHAR(36), storing as
+    stringified hex values.
+    """
+
+    impl = CHAR
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(PG_UUID(as_uuid=True))
+        return dialect.type_descriptor(CHAR(36))
+
+    def process_bind_param(self, value, dialect):
+        if value is None or dialect.name == "postgresql":
+            return value
+        if isinstance(value, uuid.UUID):
+            return str(value)
+        return str(uuid.UUID(value))
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        if not isinstance(value, uuid.UUID):
+            return uuid.UUID(value)
+        return value
 
 
 class Base(DeclarativeBase):
@@ -34,7 +65,7 @@ class UUIDMixin:
     def id(cls) -> Mapped[uuid.UUID]:
         """UUID primary key with auto-generation."""
         return mapped_column(
-            PG_UUID(as_uuid=True),
+            GUID(),
             primary_key=True,
             default=uuid.uuid4,
             nullable=False,
@@ -101,18 +132,25 @@ class SoftDeleteMixin:
         """Mark the record as soft-deleted.
 
         Sets deleted_at to the current UTC timestamp.
+        Also sets is_active to False if the field exists.
         """
         self.deleted_at = datetime.now(UTC)
+        if hasattr(self, "is_active"):
+            self.is_active = False
 
     def restore(self) -> None:
         """Restore a soft-deleted record.
 
         Clears the deleted_at timestamp.
+        Also restores is_active to True if the field exists.
         """
         self.deleted_at = None
+        if hasattr(self, "is_active"):
+            self.is_active = True
 
 
 __all__ = [
+    "GUID",
     "Base",
     "SoftDeleteMixin",
     "TimestampMixin",

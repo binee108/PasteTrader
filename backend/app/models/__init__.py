@@ -6,7 +6,7 @@ This package contains all database models.
 """
 
 from app.models.agent import Agent
-from app.models.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
+from app.models.base import GUID, Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 from app.models.enums import (
     AuthMode,
     ExecutionStatus,
@@ -18,9 +18,11 @@ from app.models.enums import (
 )
 from app.models.execution import ExecutionLog, NodeExecution, WorkflowExecution
 from app.models.tool import Tool
+from app.models.user import User
 from app.models.workflow import Edge, Node, Workflow
 
 __all__ = [
+    "GUID",
     "Agent",
     "AuthMode",
     "Base",
@@ -38,6 +40,7 @@ __all__ = [
     "ToolType",
     "TriggerType",
     "UUIDMixin",
+    "User",
     "Workflow",
     "WorkflowExecution",
 ]

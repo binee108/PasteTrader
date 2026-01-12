@@ -114,27 +114,29 @@ def get_test_model_class():
     global _test_model_defined, _TestModelClass, _MockUserClass
 
     if not _test_model_defined:
+        from typing import ClassVar
+
         from app.models.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 
         class TestModel(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
             """Test model for mixin behavior testing."""
 
             __tablename__ = "test_models"
-            __table_args__ = {"extend_existing": True}
+            __table_args__: ClassVar[dict[str, bool]] = {"extend_existing": True}
 
             name: Mapped[str] = mapped_column(String(100), nullable=False)
 
         # Mock User model to satisfy FK constraints from Tool/Agent models
-        class User(UUIDMixin, Base):
+        class TestUserBase(UUIDMixin, Base):
             """Mock User model for testing FK references."""
 
             __tablename__ = "users"
-            __table_args__ = {"extend_existing": True}
+            __table_args__: ClassVar[dict[str, bool]] = {"extend_existing": True}
 
             name: Mapped[str] = mapped_column(String(100), nullable=False)
 
         _TestModelClass = TestModel
-        _MockUserClass = User
+        _MockUserClass = TestUserBase
         _test_model_defined = True
 
     return _TestModelClass
@@ -218,8 +220,6 @@ class TestTimestampMixinBehavior:
         session.add(model)
         await session.commit()
         await session.refresh(model)
-
-        original_updated_at = model.updated_at
 
         # Wait a tiny bit and update
         import asyncio
@@ -409,7 +409,7 @@ class TestUUIDMixinBehavior:
     @pytest.mark.asyncio
     async def test_uuid_is_primary_key(self, db_session) -> None:
         """UUID should be the primary key."""
-        session, test_model_class = db_session
+        _session, test_model_class = db_session
 
         mapper = inspect(test_model_class)
         primary_keys = [col.name for col in mapper.primary_key]

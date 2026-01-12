@@ -59,16 +59,16 @@ class TestAsyncEngineCreation:
 
     def test_engine_pool_size_configured(self) -> None:
         """Engine should have configured pool size."""
-        from app.db import engine
         from app.core.config import settings
+        from app.db import engine
 
         # Check pool size matches configuration
         assert engine.sync_engine.pool.size() == settings.DATABASE_POOL_SIZE
 
     def test_engine_max_overflow_configured(self) -> None:
         """Engine should have configured max_overflow."""
-        from app.db import engine
         from app.core.config import settings
+        from app.db import engine
 
         # Check max overflow matches configuration
         assert engine.sync_engine.pool._max_overflow == settings.DATABASE_MAX_OVERFLOW

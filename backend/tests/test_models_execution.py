@@ -17,7 +17,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import String, text
+from sqlalchemy import String
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -446,7 +446,7 @@ def get_mock_classes():
 
         from app.models.base import Base, UUIDMixin
 
-        class User(UUIDMixin, Base):
+        class TestUserExecution(UUIDMixin, Base):
             """Mock User model for testing FK references."""
 
             __tablename__ = "users"
@@ -454,7 +454,7 @@ def get_mock_classes():
 
             name: Mapped[str] = mapped_column(String(100), nullable=False)
 
-        _MockUserClass = User
+        _MockUserClass = TestUserExecution
         _test_models_defined = True
 
     return _MockUserClass
@@ -1311,6 +1311,49 @@ class TestNodeExecutionModelBehavior:
         assert node_execution.duration_seconds == 15.0
 
     @pytest.mark.asyncio
+    async def test_nodeexecution_duration_seconds_returns_none_without_times(
+        self, db_session
+    ) -> None:
+        """NodeExecution duration_seconds should return None without started_at or ended_at."""
+        from app.models.execution import NodeExecution, WorkflowExecution
+        from app.models.workflow import Node, Workflow
+
+        workflow = Workflow(owner_id=uuid.uuid4(), name="Test Workflow")
+        db_session.add(workflow)
+        await db_session.commit()
+
+        node = Node(
+            workflow_id=workflow.id,
+            name="Test Node",
+            node_type=NodeType.TRIGGER,
+        )
+        db_session.add(node)
+        await db_session.commit()
+
+        execution = WorkflowExecution(
+            workflow_id=workflow.id,
+            trigger_type=TriggerType.MANUAL,
+        )
+        db_session.add(execution)
+        await db_session.commit()
+
+        # Only started_at is set, not ended_at
+        started = datetime.now(UTC)
+        node_execution = NodeExecution(
+            workflow_execution_id=execution.id,
+            node_id=node.id,
+            execution_order=1,
+            started_at=started,
+            # ended_at is None
+        )
+        db_session.add(node_execution)
+        await db_session.commit()
+        await db_session.refresh(node_execution)
+
+        # Should return None when ended_at is not set
+        assert node_execution.duration_seconds is None
+
+    @pytest.mark.asyncio
     async def test_nodeexecution_can_retry_when_failed(self, db_session) -> None:
         """NodeExecution can_retry should return True when failed and retries available."""
         from app.models.execution import NodeExecution, WorkflowExecution
@@ -1350,6 +1393,52 @@ class TestNodeExecutionModelBehavior:
         # Eagerly load the node relationship
         await db_session.refresh(node_execution, ["node"])
 
+        assert node_execution.can_retry is True
+
+    @pytest.mark.asyncio
+    async def test_nodeexecution_can_retry_uses_default_max_without_retry_config(
+        self, db_session
+    ) -> None:
+        """NodeExecution can_retry should use default max_retries=3 when node has no retry_config."""
+        from app.models.execution import NodeExecution, WorkflowExecution
+        from app.models.workflow import Node, Workflow
+
+        workflow = Workflow(owner_id=uuid.uuid4(), name="Test Workflow")
+        db_session.add(workflow)
+        await db_session.commit()
+
+        # Node without retry_config
+        node = Node(
+            workflow_id=workflow.id,
+            name="Test Node",
+            node_type=NodeType.TRIGGER,
+            # No retry_config set
+        )
+        db_session.add(node)
+        await db_session.commit()
+
+        execution = WorkflowExecution(
+            workflow_id=workflow.id,
+            trigger_type=TriggerType.MANUAL,
+        )
+        db_session.add(execution)
+        await db_session.commit()
+
+        node_execution = NodeExecution(
+            workflow_execution_id=execution.id,
+            node_id=node.id,
+            execution_order=1,
+            status=ExecutionStatus.FAILED,
+            retry_count=2,  # Less than default max of 3
+        )
+        db_session.add(node_execution)
+        await db_session.commit()
+        await db_session.refresh(node_execution)
+
+        # Eagerly load the node relationship
+        await db_session.refresh(node_execution, ["node"])
+
+        # Should use default max_retries=3
         assert node_execution.can_retry is True
 
     @pytest.mark.asyncio
@@ -1753,10 +1842,11 @@ class TestExecutionCascadeDeletes:
 
         db_session.expire_all()
 
-        # Verify NodeExecution is deleted
+        # Verify NodeExecution is deleted via ORM cascade
+        from sqlalchemy import select
+
         result = await db_session.execute(
-            text("SELECT id FROM node_executions WHERE id = :id"),
-            {"id": str(node_execution_id)},
+            select(NodeExecution).where(NodeExecution.id == node_execution_id)
         )
         deleted = result.scalar_one_or_none()
         assert deleted is None
@@ -1796,10 +1886,11 @@ class TestExecutionCascadeDeletes:
 
         db_session.expire_all()
 
-        # Verify ExecutionLog is deleted
+        # Verify ExecutionLog is deleted via ORM cascade
+        from sqlalchemy import select
+
         result = await db_session.execute(
-            text("SELECT id FROM execution_logs WHERE id = :id"),
-            {"id": str(log_id)},
+            select(ExecutionLog).where(ExecutionLog.id == log_id)
         )
         deleted = result.scalar_one_or_none()
         assert deleted is None
@@ -1856,10 +1947,11 @@ class TestExecutionCascadeDeletes:
 
         db_session.expire_all()
 
-        # Verify ExecutionLog is deleted
+        # Verify ExecutionLog is deleted via ORM cascade
+        from sqlalchemy import select
+
         result = await db_session.execute(
-            text("SELECT id FROM execution_logs WHERE id = :id"),
-            {"id": str(log_id)},
+            select(ExecutionLog).where(ExecutionLog.id == log_id)
         )
         deleted = result.scalar_one_or_none()
         assert deleted is None
