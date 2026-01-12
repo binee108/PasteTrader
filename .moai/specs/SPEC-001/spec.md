@@ -134,7 +134,7 @@ The system shall define enum types for domain-specific values.
 | Enum Name | Values | Purpose |
 |-----------|--------|---------|
 | NodeType | `trigger`, `tool`, `agent`, `condition`, `adapter`, `parallel`, `aggregator` | Workflow node classification |
-| ToolType | `data_fetcher`, `technical_indicator`, `market_screener`, `code_analyzer`, `notification` | Tool classification |
+| ToolType | `http`, `mcp`, `python`, `shell`, `builtin` | Tool execution mechanism types |
 | ModelProvider | `anthropic`, `openai`, `glm` | LLM provider identification |
 | ExecutionStatus | `pending`, `running`, `completed`, `failed`, `skipped`, `cancelled` | Workflow execution state |
 | AuthMode | `oauth`, `standalone`, `sdk`, `glm` | API authentication modes |
