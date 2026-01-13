@@ -146,9 +146,10 @@ class TestToolModelAuthMasking:
     @pytest.mark.asyncio
     async def test_tool_get_masked_auth_config(self, db_session):
         """Test Tool.get_masked_auth_config method."""
+        import uuid
+
         from app.models.enums import ToolType
         from app.models.tool import Tool
-        import uuid
 
         tool = Tool(
             owner_id=uuid.uuid4(),
@@ -172,9 +173,10 @@ class TestToolModelAuthMasking:
     @pytest.mark.asyncio
     async def test_tool_get_masked_auth_config_with_none(self, db_session):
         """Test Tool.get_masked_auth_config when auth_config is None."""
+        import uuid
+
         from app.models.enums import ToolType
         from app.models.tool import Tool
-        import uuid
 
         tool = Tool(
             owner_id=uuid.uuid4(),
@@ -193,9 +195,10 @@ class TestToolModelAuthMasking:
     @pytest.mark.asyncio
     async def test_tool_repr_shows_masked_auth(self, db_session):
         """Test that Tool.__repr__ doesn't expose sensitive data."""
+        import uuid
+
         from app.models.enums import ToolType
         from app.models.tool import Tool
-        import uuid
 
         tool = Tool(
             owner_id=uuid.uuid4(),

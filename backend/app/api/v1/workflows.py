@@ -940,7 +940,10 @@ async def update_workflow_graph(
         if current.version != graph_in.version:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Version conflict: expected {current.version}, got {graph_in.version}",
+                detail=(
+                    f"Version conflict: expected {current.version}, "
+                    f"got {graph_in.version}"
+                ),
             )
 
         # Get workflow with current nodes and edges

@@ -425,7 +425,7 @@ class UserService:
             new_password: New password to set
 
         Returns:
-            True if password was changed, False if user not found or old password incorrect
+            True if password changed, False if user not found or old password incorrect
 
         Examples:
             >>> service = UserService(session)

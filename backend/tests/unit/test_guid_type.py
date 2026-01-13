@@ -94,7 +94,7 @@ class TestGUIDProcessBindParam:
         guid_type = GUID()
         dialect = sqlite.dialect()
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="badly formed hexadecimal UUID string"):
             guid_type.process_bind_param("invalid-uuid", dialect)
 
 
@@ -144,7 +144,6 @@ class TestGUIDIntegration:
 
     def test_guid_column_with_sqlite(self):
         """Test GUID column works with SQLite."""
-        from sqlalchemy.dialects import sqlite
 
         engine = create_engine("sqlite:///:memory:")
 

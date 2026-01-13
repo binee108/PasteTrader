@@ -7,7 +7,7 @@ ruleDirs:
   - languages
 
 testConfigs:
-  - ./**/__tests__/*.yml
+  - testDir: ./
 
 languageGlobs:
   python:

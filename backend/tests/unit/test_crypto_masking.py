@@ -6,7 +6,6 @@ REQ: REQ-008 - Auth Config Security
 Additional tests to improve coverage for mask_auth_config function.
 """
 
-import pytest
 
 from app.utils.crypto import mask_auth_config
 

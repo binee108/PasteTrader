@@ -149,7 +149,10 @@ class NodeBase(BaseSchema):
     )
     node_type: NodeType = Field(
         ...,
-        description="Type of the node (trigger, tool, agent, condition, adapter, parallel, aggregator)",
+        description=(
+            "Type of the node: trigger, tool, agent, condition, adapter, parallel, "
+            "or aggregator"
+        ),
         examples=["trigger", "tool", "agent"],
     )
     position_x: float = Field(

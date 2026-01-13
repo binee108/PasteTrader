@@ -427,7 +427,7 @@ class ExecutionLog(UUIDMixin, Base):
     """ExecutionLog model for storing execution log entries.
 
     Represents a log entry generated during workflow or node execution.
-    Can be associated with a workflow execution and optionally a specific node execution.
+    Associated with a workflow execution and optionally a node execution.
 
     Attributes:
         id: UUID primary key (from UUIDMixin)

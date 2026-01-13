@@ -408,7 +408,8 @@ class LogContext:
         >>> logger = get_logger(__name__)
         >>> with LogContext(logger, user_id="123", action="create"):
         ...     logger.info("Processing user creation")
-        # Logs: "Processing user creation" with context {user_id: "123", action: "create"}
+        # Logs: "Processing user creation" with context
+        # {user_id: "123", action: "create"}
     """
 
     def __init__(self, logger: logging.Logger, **context: Any) -> None:

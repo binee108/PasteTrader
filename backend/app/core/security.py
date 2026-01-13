@@ -338,7 +338,8 @@ def benchmark_hash_performance(iterations: int = 10) -> dict[str, float]:
         iterations: Number of iterations to run (default: 10)
 
     Returns:
-        Dictionary with 'hash_mean', 'hash_max', 'verify_mean', 'verify_max' times in seconds
+        Dictionary with performance metrics:
+        'hash_mean', 'hash_max', 'verify_mean', 'verify_max' (seconds)
 
     Examples:
         >>> stats = benchmark_hash_performance(10)

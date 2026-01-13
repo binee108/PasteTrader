@@ -183,5 +183,5 @@ class TestGetFernetKey:
         invalid_key = "not_a_valid_fernet_key"
         monkeypatch.setenv("ENCRYPTION_KEY", invalid_key)
 
-        with pytest.raises(ValueError, match="Invalid Fernet key"):
+        with pytest.raises(ValueError, match="Invalid ENCRYPTION_KEY"):
             get_fernet_key()
