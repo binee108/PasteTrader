@@ -6,8 +6,6 @@ REQ: REQ-008 - Auth Config Security
 Tests for encryption and decryption of sensitive data using Fernet.
 """
 
-import os
-
 import pytest
 
 
@@ -131,13 +129,16 @@ class TestFernetDecryption:
     def test_decrypt_dict_requires_correct_key(self, fernet_key):
         """Test that decrypt_dict fails with wrong key."""
         from cryptography.fernet import Fernet
+
         from app.utils.crypto import decrypt_dict, encrypt_dict
 
         original = {"api_key": "secret123"}
         encrypted = encrypt_dict(original, fernet_key)
 
         wrong_key = Fernet.generate_key()
-        with pytest.raises(Exception):  # Fernet.InvalidToken
+        from cryptography.fernet import InvalidToken
+
+        with pytest.raises(InvalidToken):
             decrypt_dict(encrypted, wrong_key)
 
     def test_decrypt_dict_requires_key(self):
@@ -154,6 +155,7 @@ class TestGetFernetKey:
     def test_get_fernet_key_from_env(self, monkeypatch):
         """Test getting Fernet key from environment variable."""
         from cryptography.fernet import Fernet
+
         from app.utils.crypto import get_fernet_key
 
         # Generate a valid key
@@ -181,5 +183,5 @@ class TestGetFernetKey:
         invalid_key = "not_a_valid_fernet_key"
         monkeypatch.setenv("ENCRYPTION_KEY", invalid_key)
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Invalid Fernet key"):
             get_fernet_key()

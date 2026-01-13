@@ -253,6 +253,7 @@ npm run dev
 - [SPEC-001: Database Foundation](.moai/specs/SPEC-001/spec.md) - 구현 완료
 - [SPEC-002: User Authentication Model](.moai/specs/SPEC-002/spec.md) - 구현 완료
 - [SPEC-003: Workflow Domain Models](.moai/specs/SPEC-003/spec.md) - 구현 완료
+- [SPEC-004: Tool & Agent Registry](.moai/specs/SPEC-004/spec.md) - 구현 완료
 - [SPEC-007: Workflow Execution Engine](.moai/specs/SPEC-007/spec.md) - 구현 완료
 
 ## 테스트
@@ -283,7 +284,7 @@ open htmlcov/index.html
 ## 상태
 
 - [x] Phase 0: 데이터베이스 기반 구축 (SPEC-001, SPEC-002)
-- [x] Phase 1: 워크플로우 코어 모델 (SPEC-003, SPEC-007)
+- [x] Phase 1: 워크플로우 코어 모델 (SPEC-003, SPEC-004, SPEC-007)
 - [ ] Phase 2: 실행 추적 모델
 - [ ] Phase 3: API 파운데이션
 - [ ] Phase 4: 프론트엔드 개발
@@ -293,6 +294,7 @@ open htmlcov/index.html
 - **SPEC-001**: Database Foundation Setup (베이스 모델 및 Mixin 구현)
 - **SPEC-002**: User Authentication Model (사용자 인증 모델 및 보안 유틸리티)
 - **SPEC-003**: Workflow Domain Models (Workflow, Node, Edge 도메인 모델)
+- **SPEC-004**: Tool & Agent Registry (Tool 및 Agent 레지스트리 모델, 암호화 유틸리티)
 - **SPEC-007**: Workflow Execution Engine (워크플로우 실행 엔진)
 
 ## 연락처
