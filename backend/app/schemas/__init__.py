@@ -51,6 +51,27 @@ from app.schemas.execution import (
     WorkflowExecutionWithNodes,
 )
 
+# Agent schemas
+from app.schemas.agent import (
+    AgentCreate,
+    AgentResponse,
+    AgentTestRequest,
+    AgentTestResponse,
+    AgentToolsUpdate,
+    AgentUpdate,
+    ModelConfig,
+)
+
+# Tool schemas
+from app.schemas.tool import (
+    ToolCreate,
+    ToolDetailResponse,
+    ToolResponse,
+    ToolTestRequest,
+    ToolTestResponse,
+    ToolUpdate,
+)
+
 # Workflow schemas
 from app.schemas.workflow import (
     EdgeBase,
@@ -83,6 +104,21 @@ __all__ = [
     "BaseSchema",
     "ConfigField",
     "DescriptionField",
+    # Agent schemas
+    "AgentCreate",
+    "AgentResponse",
+    "AgentTestRequest",
+    "AgentTestResponse",
+    "AgentToolsUpdate",
+    "AgentUpdate",
+    "ModelConfig",
+    # Tool schemas
+    "ToolCreate",
+    "ToolDetailResponse",
+    "ToolResponse",
+    "ToolTestRequest",
+    "ToolTestResponse",
+    "ToolUpdate",
     # Workflow schemas
     "EdgeBase",
     "EdgeBatchCreate",
