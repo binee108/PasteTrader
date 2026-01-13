@@ -42,6 +42,7 @@ from app.models.enums import (
 )
 from app.models.execution import ExecutionLog, NodeExecution, WorkflowExecution
 from app.models.tool import Tool
+from app.models.tool_spec009 import Spec009Base
 from app.models.workflow import Edge, Node, Workflow
 
 # =============================================================================
@@ -95,9 +96,10 @@ async def async_engine() -> AsyncGenerator[AsyncEngine]:
         connect_args={"check_same_thread": False},
     )
 
-    # Create all tables
+    # Create all tables (both Base and Spec009Base)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(Spec009Base.metadata.create_all)
 
     try:
         yield engine
@@ -105,6 +107,7 @@ async def async_engine() -> AsyncGenerator[AsyncEngine]:
         # Drop all tables and dispose engine
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Spec009Base.metadata.drop_all)
         await engine.dispose()
 
 
