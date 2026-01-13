@@ -113,7 +113,7 @@ PasteTrader는 AI 기반 트레이딩 워크플로우 자동화 플랫폼입니�
 - [x] WorkflowExecution with trigger tracking
 - [x] NodeExecution with retry support
 - [x] ExecutionLog for detailed debugging
-- [ ] Schedule model for APScheduler (SPEC-006)
+- [x] Schedule model for APScheduler (SPEC-006)
 - [x] Migration scripts
 
 ---
@@ -369,7 +369,7 @@ Phase 2 ────────────────┘      Phase 7 <──
 | SPEC-003 | 1 | Workflow Domain Models | P0 | ✅ |
 | SPEC-004 | 1 | Tool & Agent Registry | P0 | ✅ |
 | SPEC-005 | 2 | Execution Tracking Models | P0 | ✅ |
-| SPEC-006 | 2 | Schedule Configuration Model | P1 | |
+| SPEC-006 | 2 | Schedule Configuration Model | P1 | ✅ |
 | SPEC-007 | 3 | Workflow API Endpoints | P0 | |
 | SPEC-008 | 3 | Execution API Endpoints | P0 | |
 | SPEC-009 | 3 | Tool/Agent API Endpoints | P1 | |
@@ -491,7 +491,7 @@ schedules             - APScheduler 작업
     - Provider 및 모델 구성
   - 마이그레이션 스크립트 작성
 
-- ✅ Phase 2: Execution Models (SPEC-005)
+- ✅ Phase 2: Execution Models (SPEC-005, SPEC-006)
   - WorkflowExecution 모델 구현 (SPEC-005)
     - 트리거 추적
     - 실행 상태 관리
@@ -500,14 +500,14 @@ schedules             - APScheduler 작업
     - 개별 노드 실행 상태 추적
   - ExecutionLog 모델 구현 (SPEC-005)
     - 상세 디버깅 로그
+  - Schedule 모델 구현 (SPEC-006)
+    - APScheduler 기반 스케줄 설정
+    - Cron, Interval, Date 타입 지원
+    - 활성/비활성 상태 관리
   - 마이그레이션 스크립트 작성
 
 **Next Session Goals**:
-1. **Phase 2: Execution Models 완료** (SPEC-006)
-   - Schedule 모델
-   - APScheduler 통합 준비
-
-2. **Phase 3: API Layer** (SPEC-007, SPEC-008, SPEC-009)
+1. **Phase 3: API Layer** (SPEC-007, SPEC-008, SPEC-009)
    - Workflow Schemas (SPEC-007)
    - Workflow CRUD API (SPEC-007)
    - Execution API (SPEC-008)
@@ -516,18 +516,14 @@ schedules             - APScheduler 작업
 ### Commands for Next Session
 
 ```bash
-# Phase 1 시작
-/moai:1-plan "Workflow Domain Models"
-
-# 또는 Phase 2 시작
-/moai:1-plan "Execution Tracking Models"
+# Phase 3 시작
+/moai:1-plan "Workflow API Endpoints"
 ```
 
 ### Recommended Sequence
 
-1. **Week 2**: Phase 1 (Workflow Core Models) + Phase 2 (Execution Models)
-2. **Week 3**: Phase 3 (API Layer)
-3. **Week 4-5**: Phase 4 (Workflow Engine) ⭐ Critical Path
+1. **Week 2**: Phase 3 (API Layer)
+2. **Week 3-4**: Phase 4 (Workflow Engine) ⭐ Critical Path
 
 ---
 
