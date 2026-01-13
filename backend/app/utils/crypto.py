@@ -17,9 +17,9 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
+from typing import Any, cast
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet
 
 
 def generate_fernet_key() -> bytes:
@@ -86,6 +86,7 @@ def decrypt_dict(encrypted_data: bytes, key: bytes) -> dict[str, Any]:
 
     Raises:
         TypeError: If key is None or not bytes
+        ValueError: If decrypted data is not a valid dictionary
         InvalidToken: If key is incorrect or data is corrupted
 
     Example:
@@ -101,7 +102,15 @@ def decrypt_dict(encrypted_data: bytes, key: bytes) -> dict[str, Any]:
 
     fernet = Fernet(key)
     decrypted_data = fernet.decrypt(encrypted_data)
-    return json.loads(decrypted_data.decode("utf-8"))
+    result: Any = json.loads(decrypted_data.decode("utf-8"))
+
+    # Type safety check: ensure result is a dictionary
+    if not isinstance(result, dict):
+        raise ValueError(
+            f"Decrypted data is not a dictionary, got {type(result).__name__}"
+        )
+
+    return cast("dict[str, Any]", result)
 
 
 def get_fernet_key() -> bytes:
@@ -157,7 +166,6 @@ _SENSITIVE_FIELDS = {
     "refresh_token",
     "private_key",
     "auth_token",
-    "client_secret",
     "client_secret",
 }
 
