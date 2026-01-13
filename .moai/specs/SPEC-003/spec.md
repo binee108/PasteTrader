@@ -7,7 +7,7 @@
 | SPEC ID | SPEC-003 |
 | Title | Workflow Domain Models |
 | Created | 2026-01-11 |
-| Status | Planned |
+| Status | Completed |
 | Priority | High (P0) |
 | Lifecycle | spec-anchored |
 | Author | workflow-spec |
@@ -428,3 +428,4 @@ CREATE INDEX idx_edges_target ON edges(target_node_id);
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2026-01-11 | workflow-spec | 최초 SPEC 작성 |
+| 2.0.0 | 2026-01-13 | manager-tdd | TDD 구현 완료 - 105개 테스트 통과, 100% 커버리지, Git 커밋 8c3f2e1 |
