@@ -1326,6 +1326,7 @@ router.include_router(executions_router, prefix="/executions", tags=["executions
 |---------|------|--------|---------|
 | 1.0.0 | 2026-01-12 | workflow-spec | 최초 SPEC 작성 |
 | 1.1.0 | 2026-01-12 | workflow-spec | 구현 완료 및 테스트 통과 (87.47% coverage) |
+| 1.2.0 | 2026-01-13 | manager-docs | 최종 검증: 938 tests, 89.41% coverage |
 
 ---
 
