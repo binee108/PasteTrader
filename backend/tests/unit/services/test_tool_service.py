@@ -12,7 +12,7 @@ Test suite for ToolService business logic layer covering:
 - Error handling and edge cases
 """
 
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import UUID, uuid4
 
 import pytest
@@ -21,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tool_spec009 import Tool as ToolModel
 from app.schemas.tool import ToolCreate, ToolUpdate
-
 
 # =============================================================================
 # Test Fixtures

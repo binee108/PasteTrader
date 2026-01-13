@@ -7,17 +7,14 @@ REQ: REQ-007 - Agent CRUD Operations
 This module contains comprehensive tests for AgentService following TDD RED-GREEN-REFACTOR cycle.
 """
 
-from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.agent import Agent as AgentModel
 from app.models.tool import Tool as ToolModel
-from app.schemas.agent import AgentCreate, AgentUpdate, AgentToolsUpdate
+from app.schemas.agent import AgentCreate, AgentToolsUpdate, AgentUpdate
 from app.services.agent_service import AgentService
-
 
 # =============================================================================
 # Fixtures
@@ -346,7 +343,7 @@ class TestListAgents:
         active_agent = AgentCreate(**active_data)
         inactive_agent = AgentCreate(**inactive_data)
 
-        created_active = await agent_service.create_agent(
+        await agent_service.create_agent(
             db_session, active_agent, sample_owner_id
         )
         created_inactive = await agent_service.create_agent(

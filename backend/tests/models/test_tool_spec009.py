@@ -11,16 +11,11 @@ The SPEC-009 Tool model is different from SPEC-004 Tool model:
 TDD RED Phase: All tests should fail initially.
 """
 
-import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import String, Text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import Mapped, mapped_column
-
-from app.models.base import Base, GUID
 
 # Test will use SQLite for unit testing (no PostgreSQL needed)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -90,12 +85,12 @@ class TestToolModelStructure:
 async def db_session():
     """Create async session for testing with tables created."""
     # Import BEFORE creating engine to avoid conflicts with Agent model
-    from app.models.tool_spec009 import Tool
-
     # Create a separate metadata for Tool SPEC-009 to avoid conflicts
     from sqlalchemy import MetaData
 
-    tool_metadata = MetaData()
+    from app.models.tool_spec009 import Tool
+
+    MetaData()
 
     # Create engine
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
@@ -306,8 +301,9 @@ class TestToolModelBehavior:
     @pytest.mark.asyncio
     async def test_tool_query_by_name(self, db_session) -> None:
         """Tool should be queryable by name."""
-        from app.models.tool_spec009 import Tool
         from sqlalchemy import select
+
+        from app.models.tool_spec009 import Tool
 
         tool = Tool(name="queryable_tool", parameters={})
         db_session.add(tool)
@@ -324,15 +320,16 @@ class TestToolModelBehavior:
     @pytest.mark.asyncio
     async def test_tool_query_by_is_active(self, db_session) -> None:
         """Tool should be queryable by is_active status."""
-        from app.models.tool_spec009 import Tool
         from sqlalchemy import select
+
+        from app.models.tool_spec009 import Tool
 
         active_tool = Tool(name="active_tool", parameters={}, is_active=True)
         inactive_tool = Tool(name="inactive_tool", parameters={}, is_active=False)
         db_session.add_all([active_tool, inactive_tool])
         await db_session.commit()
 
-        result = await db_session.execute(select(Tool).where(Tool.is_active == True))
+        result = await db_session.execute(select(Tool).where(Tool.is_active))
         active_tools = result.scalars().all()
 
         assert len(active_tools) == 1

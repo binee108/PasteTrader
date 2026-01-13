@@ -11,17 +11,14 @@ query filtering with pagination.
 
 from uuid import UUID
 
-from sqlalchemy import delete, insert, select, update
+from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from typing import Any
 
 from app.models.agent import Agent as AgentModel, agent_tools
 from app.models.tool import Tool as ToolModel
 from app.schemas.agent import (
     AgentCreate,
-    AgentTestRequest,
-    AgentTestResponse,
     AgentToolsUpdate,
     AgentUpdate,
 )
@@ -91,8 +88,7 @@ class AgentService:
         await db.commit()
 
         # Reload agent with tools
-        agent = await self.get_agent(db, agent.id)
-        return agent
+        return await self.get_agent(db, agent.id)
 
     async def get_agent(self, db: AsyncSession, agent_id: UUID) -> AgentModel | None:
         """Get an agent by ID with tools loaded.
@@ -279,7 +275,7 @@ class AgentService:
         result = await db.execute(
             select(ToolModel.id)
             .where(ToolModel.id.in_(tool_ids))
-            .where(ToolModel.is_active == True)
+            .where(ToolModel.is_active)
         )
         return [row[0] for row in result.all()]
 

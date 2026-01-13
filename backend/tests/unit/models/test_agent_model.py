@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
-from app.models.enums import ModelProvider, ToolType
+from app.models.enums import ToolType
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -62,8 +62,6 @@ async def db_session() -> AsyncSession:
     """Create async session for testing with tables created."""
 
     # Import models to register them with Base.metadata
-    from app.models.agent import Agent
-    from app.models.tool import Tool
 
     # Get mock User class to satisfy FK constraints
     get_mock_user_class()
@@ -251,9 +249,10 @@ class TestAgentModelBehavior:
         self, db_session: AsyncSession
     ) -> None:
         """Agent should have many-to-many relationship with Tool."""
+        from sqlalchemy.orm import selectinload
+
         from app.models.agent import Agent
         from app.models.tool import Tool
-        from sqlalchemy.orm import selectinload
 
         owner_id = uuid.uuid4()
 
@@ -301,9 +300,10 @@ class TestAgentModelBehavior:
         self, db_session: AsyncSession
     ) -> None:
         """Agent tools should be loadable from database."""
+        from sqlalchemy.orm import selectinload
+
         from app.models.agent import Agent
         from app.models.tool import Tool
-        from sqlalchemy.orm import selectinload
 
         owner_id = uuid.uuid4()
 
