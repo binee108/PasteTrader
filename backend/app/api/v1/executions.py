@@ -46,6 +46,8 @@ from app.services.execution_service import (
     WorkflowExecutionService,
 )
 
+from app.services.workflow_service import WorkflowService
+
 router = APIRouter()
 
 
@@ -149,7 +151,7 @@ LogFilters = Annotated[dict[str, Any], Depends(get_log_filters)]
     "/",
     response_model=WorkflowExecutionPaginatedResponse,
     summary="List workflow executions",
-    description="Retrieve a paginated list of workflow executions with optional filtering.",
+    description="List workflow executions with optional filtering.",
 )
 async def list_executions(
     db: DBSession,
@@ -228,19 +230,24 @@ async def create_execution(
     Raises:
         HTTPException: 404 if workflow not found.
     """
-    try:
-        execution = await WorkflowExecutionService.create(
-            db,
-            workflow_id=execution_data.workflow_id,
-            data=execution_data,
-        )
-        await db.commit()
-    except ValueError as e:
+    # Validate workflow exists
+    workflow_service = WorkflowService(db)
+    workflow = await workflow_service.get(execution_data.workflow_id)
+    
+    if workflow is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-
+            detail=f"Workflow with ID {execution_data.workflow_id} not found",
+        )
+    
+    # Create execution
+    execution = await WorkflowExecutionService.create(
+        db,
+        workflow_id=execution_data.workflow_id,
+        data=execution_data,
+    )
+    await db.commit()
+    
     return WorkflowExecutionResponse.model_validate(execution)
 
 
@@ -418,7 +425,7 @@ async def get_execution_statistics(
     "/{execution_id}/nodes",
     response_model=NodeExecutionPaginatedResponse,
     summary="List node executions",
-    description="Retrieve a paginated list of node executions for a workflow execution.",
+    description="List node executions for a workflow execution.",
 )
 async def list_node_executions(
     db: DBSession,

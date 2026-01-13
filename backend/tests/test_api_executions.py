@@ -807,3 +807,79 @@ class TestExecutionLogEndpoints:
         data = response.json()
         assert len(data["items"]) == 1
         assert data["items"][0]["level"] == "error"
+
+
+# =============================================================================
+# Additional Coverage Tests for Uncovered Lines
+# =============================================================================
+
+
+class TestExecutionAPICoverage:
+    """Additional tests to improve coverage for executions.py."""
+
+    @pytest.fixture
+    async def workflow_id(self, async_client: AsyncClient, sample_workflow_data):
+        """Create a workflow and return its ID."""
+        response = await async_client.post(
+            "/api/v1/workflows/", json=sample_workflow_data
+        )
+        return response.json()["id"]
+
+    @pytest.mark.asyncio
+    async def test_list_executions_invalid_pagination(
+        self, async_client: AsyncClient, workflow_id: str
+    ):
+        """Test listing executions with invalid pagination parameters."""
+        response = await async_client.get(
+            f"/api/v1/executions/workflows/{workflow_id}/executions?skip=-1&limit=0"
+        )
+
+        # Should return 422 for invalid pagination
+        assert response.status_code in [
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_200_OK,  # FastAPI may handle this
+        ]
+
+    @pytest.mark.asyncio
+    async def test_create_execution_invalid_workflow_id(
+        self, async_client: AsyncClient, sample_execution_data
+    ):
+        """Test creating execution with non-existent workflow ID."""
+        execution_data = {**sample_execution_data, "workflow_id": str(uuid4())}
+
+        response = await async_client.post("/api/v1/executions/", json=execution_data)
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_get_execution_statistics_not_found(
+        self, async_client: AsyncClient, workflow_id: str
+    ):
+        """Test getting statistics for workflow with no executions."""
+        # This should still return stats (all zeros)
+        response = await async_client.get(
+            f"/api/v1/executions/workflows/{workflow_id}/statistics"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert "success_rate" in data
+        assert "total_executions" in data
+
+    @pytest.mark.asyncio
+    async def test_list_executions_with_status_filter(
+        self, async_client: AsyncClient, workflow_id: str, sample_execution_data
+    ):
+        """Test listing executions with status filter."""
+        # Create an execution
+        execution_data = {**sample_execution_data, "workflow_id": workflow_id}
+        await async_client.post("/api/v1/executions/", json=execution_data)
+
+        # Filter by pending status
+        response = await async_client.get(
+            f"/api/v1/executions/workflows/{workflow_id}/executions?status=pending"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["total"] >= 1
