@@ -7,11 +7,11 @@
 | SPEC ID | SPEC-005 |
 | Title | Execution Tracking Models |
 | Created | 2026-01-12 |
-| Status | Planned |
+| Status | Completed |
 | Priority | High (P0) |
 | Lifecycle | spec-anchored |
 | Author | workflow-spec |
-| Phase | Phase 1 - Workflow Core Models |
+| Phase | Phase 2 - Execution Tracking Models |
 
 ## Tags
 
