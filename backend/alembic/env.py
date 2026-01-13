@@ -24,9 +24,14 @@ from app.models import (  # noqa: F401
     Agent,
     Base,
     Edge,
+    ExecutionLog,
     Node,
+    NodeExecution,
+    Schedule,
     Tool,
+    User,
     Workflow,
+    WorkflowExecution,
 )
 
 # This is the Alembic Config object

@@ -2,7 +2,7 @@
 
 > **Version**: 0.1.0 (Alpha)
 > **Target**: Q1 2025
-> **Last Updated**: 2026-01-12
+> **Last Updated**: 2026-01-13
 
 ## Overview
 
@@ -20,8 +20,8 @@ PasteTrader는 AI 기반 트레이딩 워크플로우 자동화 플랫폼입니�
 | Phase | Name | Complexity | Duration | Status |
 |-------|------|------------|----------|--------|
 | 0 | Database Foundation | S-M | Week 1 | ✅ Implemented |
-| 1 | Workflow Core Models | M-L | Week 1 | 🔲 Pending |
-| 2 | Execution Models | M | Week 2 | 🔲 Pending |
+| 1 | Workflow Core Models | M-L | Week 1 | ✅ Implemented |
+| 2 | Execution Models | M | Week 2 | ✅ Implemented |
 | 3 | API Layer | M-L | Week 2 | 🔲 Pending |
 | 4 | Workflow Engine | XL | Week 3-4 | 🔲 Pending |
 | 5 | LLM Integration | L | Week 5 | 🔲 Pending |
@@ -84,12 +84,12 @@ PasteTrader는 AI 기반 트레이딩 워크플로우 자동화 플랫폼입니�
 **Dependencies**: Phase 0
 
 **Deliverables**:
-- [ ] Workflow model with JSONB config
-- [ ] Node model with 6 type enum
-- [ ] Edge model with condition support
-- [ ] Tool registry model
-- [ ] Agent configuration model
-- [ ] Migration scripts
+- [x] Workflow model with JSONB config
+- [x] Node model with 6 type enum
+- [x] Edge model with condition support
+- [x] Tool registry model
+- [x] Agent configuration model
+- [x] Migration scripts
 
 ---
 
@@ -110,11 +110,11 @@ PasteTrader는 AI 기반 트레이딩 워크플로우 자동화 플랫폼입니�
 **Dependencies**: Phase 0, Phase 1
 
 **Deliverables**:
-- [ ] WorkflowExecution with trigger tracking
-- [ ] NodeExecution with retry support
-- [ ] ExecutionLog for detailed debugging
-- [ ] Schedule model for APScheduler
-- [ ] Migration scripts
+- [x] WorkflowExecution with trigger tracking
+- [x] NodeExecution with retry support
+- [x] ExecutionLog for detailed debugging
+- [ ] Schedule model for APScheduler (SPEC-006)
+- [x] Migration scripts
 
 ---
 
@@ -366,9 +366,9 @@ Phase 2 ────────────────┘      Phase 7 <──
 |---------|-------|-------|----------|--------|
 | SPEC-001 | 0 | Database Foundation Setup | P0 | ✅ |
 | SPEC-002 | 0 | User Authentication Model | P0 | ✅ |
-| SPEC-003 | 1 | Workflow Domain Models | P0 | |
-| SPEC-004 | 1 | Tool & Agent Registry | P0 | |
-| SPEC-005 | 2 | Execution Tracking Models | P0 | |
+| SPEC-003 | 1 | Workflow Domain Models | P0 | ✅ |
+| SPEC-004 | 1 | Tool & Agent Registry | P0 | ✅ |
+| SPEC-005 | 2 | Execution Tracking Models | P0 | ✅ |
 | SPEC-006 | 2 | Schedule Configuration Model | P1 | |
 | SPEC-007 | 3 | Workflow API Endpoints | P0 | |
 | SPEC-008 | 3 | Execution API Endpoints | P0 | |
@@ -454,7 +454,7 @@ schedules             - APScheduler 작업
 
 ## Next Steps
 
-### Current Status (2026-01-12)
+### Current Status (2026-01-13)
 
 **Completed**:
 - ✅ Phase 0: Database Foundation (SPEC-001, SPEC-002)
@@ -472,21 +472,46 @@ schedules             - APScheduler 작업
   - 테스트 커버리지 89.02% 달성 (877 tests passed)
   - TRUST 5 퀄리티 게이트 통과
   - 문서 동기화 완료
-  - PR 생성: https://github.com/binee108/PasteTrader/pull/1
+
+- ✅ Phase 1: Workflow Core Models (SPEC-003, SPEC-004)
+  - Workflow 모델 구현 (SPEC-003)
+    - JSONB 기반 설정 저장
+    - 버전 관리 및 활성/비활성 상태
+  - Node 모델 구현 (SPEC-003)
+    - 6가지 노드 타입 (tool, agent, condition, adapter, trigger, aggregator)
+    - JSONB 기반 파라미터 저장
+  - Edge 모델 구현 (SPEC-003)
+    - 조건부 분기 지원
+    - 다중 에지 지원
+  - Tool 모델 구현 (SPEC-004)
+    - 도구 레지스트리
+    - 암호화된 API 키 저장
+  - Agent 모델 구현 (SPEC-004)
+    - LLM 에이전트 설정
+    - Provider 및 모델 구성
+  - 마이그레이션 스크립트 작성
+
+- ✅ Phase 2: Execution Models (SPEC-005)
+  - WorkflowExecution 모델 구현 (SPEC-005)
+    - 트리거 추적
+    - 실행 상태 관리
+  - NodeExecution 모델 구현 (SPEC-005)
+    - 재시도 지원
+    - 개별 노드 실행 상태 추적
+  - ExecutionLog 모델 구현 (SPEC-005)
+    - 상세 디버깅 로그
+  - 마이그레이션 스크립트 작성
 
 **Next Session Goals**:
-1. **Phase 1: Workflow Core Models** (SPEC-003, SPEC-004)
-   - Workflow 모델 구현
-   - Node 모델 (6가지 타입)
-   - Edge 모델
-   - Tool 모델
-   - Agent 모델
-
-2. **Phase 2: Execution Models** (SPEC-005, SPEC-006)
-   - WorkflowExecution 모델
-   - NodeExecution 모델
-   - ExecutionLog 모델
+1. **Phase 2: Execution Models 완료** (SPEC-006)
    - Schedule 모델
+   - APScheduler 통합 준비
+
+2. **Phase 3: API Layer** (SPEC-007, SPEC-008, SPEC-009)
+   - Workflow Schemas (SPEC-007)
+   - Workflow CRUD API (SPEC-007)
+   - Execution API (SPEC-008)
+   - Tool/Agent API (SPEC-009)
 
 ### Commands for Next Session
 

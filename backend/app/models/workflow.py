@@ -42,6 +42,7 @@ from app.models.enums import NodeType
 
 if TYPE_CHECKING:
     from app.models.execution import WorkflowExecution
+    from app.models.schedule import Schedule
     from app.models.user import User
 
 # Use JSONB for PostgreSQL, JSON for other databases (like SQLite for testing)
@@ -144,6 +145,13 @@ class Workflow(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     # Relationship to WorkflowExecution
     executions: Mapped[list[WorkflowExecution]] = relationship(
         "WorkflowExecution",
+        back_populates="workflow",
+        passive_deletes=True,
+    )
+
+    # Relationship to Schedule
+    schedules: Mapped[list[Schedule]] = relationship(
+        "Schedule",
         back_populates="workflow",
         passive_deletes=True,
     )

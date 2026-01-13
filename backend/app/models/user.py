@@ -25,6 +25,7 @@ from app.models.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from app.models.agent import Agent
+    from app.models.schedule import Schedule
     from app.models.tool import Tool
     from app.models.workflow import Workflow
 
@@ -94,6 +95,12 @@ class User(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     agents: Mapped[list[Agent]] = relationship(
         "Agent",
         back_populates="owner",
+        passive_deletes=True,
+    )
+
+    schedules: Mapped[list[Schedule]] = relationship(
+        "Schedule",
+        back_populates="user",
         passive_deletes=True,
     )
 

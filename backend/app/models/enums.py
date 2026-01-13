@@ -133,12 +133,31 @@ class LogLevel(str, Enum):
         return self.value
 
 
+class ScheduleType(str, Enum):
+    """Schedule type classification.
+
+    TAG: [SPEC-006] [SCHEDULE] [ENUM]
+    REQ: REQ-002 - ScheduleType Enum Definition
+
+    Defines the types of schedules supported by APScheduler.
+    """
+
+    CRON = "cron"
+    INTERVAL = "interval"
+    DATE = "date"
+
+    def __str__(self) -> str:
+        """Return the string value for serialization."""
+        return self.value
+
+
 __all__ = [
     "AuthMode",
     "ExecutionStatus",
     "LogLevel",
     "ModelProvider",
     "NodeType",
+    "ScheduleType",
     "ToolType",
     "TriggerType",
 ]
