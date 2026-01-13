@@ -377,3 +377,109 @@ class TestScheduleType:
 
         with pytest.raises(ValueError):
             ScheduleType("invalid_value")
+
+
+class TestScheduleStatus:
+    """Test ScheduleStatus enum functionality."""
+
+    def test_schedulestatus_has_scheduled_value(self) -> None:
+        """ScheduleStatus should have SCHEDULED value."""
+        from app.models.enums import ScheduleStatus
+
+        assert ScheduleStatus.SCHEDULED == "scheduled"
+
+    def test_schedulestatus_has_paused_value(self) -> None:
+        """ScheduleStatus should have PAUSED value."""
+        from app.models.enums import ScheduleStatus
+
+        assert ScheduleStatus.PAUSED == "paused"
+
+    def test_schedulestatus_has_completed_value(self) -> None:
+        """ScheduleStatus should have COMPLETED value."""
+        from app.models.enums import ScheduleStatus
+
+        assert ScheduleStatus.COMPLETED == "completed"
+
+    def test_schedulestatus_has_failed_value(self) -> None:
+        """ScheduleStatus should have FAILED value."""
+        from app.models.enums import ScheduleStatus
+
+        assert ScheduleStatus.FAILED == "failed"
+
+    def test_schedulestatus_has_cancelled_value(self) -> None:
+        """ScheduleStatus should have CANCELLED value."""
+        from app.models.enums import ScheduleStatus
+
+        assert ScheduleStatus.CANCELLED == "cancelled"
+
+    def test_schedulestatus_is_string_compatible(self) -> None:
+        """ScheduleStatus should serialize to string value."""
+        from app.models.enums import ScheduleStatus
+
+        assert str(ScheduleStatus.SCHEDULED) == "scheduled"
+        assert f"{ScheduleStatus.PAUSED}" == "paused"
+
+    def test_schedulestatus_from_string(self) -> None:
+        """ScheduleStatus should deserialize from string value."""
+        from app.models.enums import ScheduleStatus
+
+        assert ScheduleStatus("scheduled") == ScheduleStatus.SCHEDULED
+        assert ScheduleStatus("paused") == ScheduleStatus.PAUSED
+        assert ScheduleStatus("completed") == ScheduleStatus.COMPLETED
+
+    def test_invalid_schedulestatus_raises_valueerror(self) -> None:
+        """Invalid ScheduleStatus value should raise ValueError."""
+        from app.models.enums import ScheduleStatus
+
+        with pytest.raises(ValueError):
+            ScheduleStatus("invalid_value")
+
+
+class TestExecutionHistoryStatus:
+    """Test ExecutionHistoryStatus enum functionality."""
+
+    def test_executionhistorystatus_has_pending_value(self) -> None:
+        """ExecutionHistoryStatus should have PENDING value."""
+        from app.models.enums import ExecutionHistoryStatus
+
+        assert ExecutionHistoryStatus.PENDING == "pending"
+
+    def test_executionhistorystatus_has_running_value(self) -> None:
+        """ExecutionHistoryStatus should have RUNNING value."""
+        from app.models.enums import ExecutionHistoryStatus
+
+        assert ExecutionHistoryStatus.RUNNING == "running"
+
+    def test_executionhistorystatus_has_completed_value(self) -> None:
+        """ExecutionHistoryStatus should have COMPLETED value."""
+        from app.models.enums import ExecutionHistoryStatus
+
+        assert ExecutionHistoryStatus.COMPLETED == "completed"
+
+    def test_executionhistorystatus_has_failed_value(self) -> None:
+        """ExecutionHistoryStatus should have FAILED value."""
+        from app.models.enums import ExecutionHistoryStatus
+
+        assert ExecutionHistoryStatus.FAILED == "failed"
+
+    def test_executionhistorystatus_is_string_compatible(self) -> None:
+        """ExecutionHistoryStatus should serialize to string value."""
+        from app.models.enums import ExecutionHistoryStatus
+
+        assert str(ExecutionHistoryStatus.PENDING) == "pending"
+        assert f"{ExecutionHistoryStatus.RUNNING}" == "running"
+
+    def test_executionhistorystatus_from_string(self) -> None:
+        """ExecutionHistoryStatus should deserialize from string value."""
+        from app.models.enums import ExecutionHistoryStatus
+
+        assert ExecutionHistoryStatus("pending") == ExecutionHistoryStatus.PENDING
+        assert ExecutionHistoryStatus("running") == ExecutionHistoryStatus.RUNNING
+        assert ExecutionHistoryStatus("completed") == ExecutionHistoryStatus.COMPLETED
+
+    def test_invalid_executionhistorystatus_raises_valueerror(self) -> None:
+        """Invalid ExecutionHistoryStatus value should raise ValueError."""
+        from app.models.enums import ExecutionHistoryStatus
+
+        with pytest.raises(ValueError):
+            ExecutionHistoryStatus("invalid_value")

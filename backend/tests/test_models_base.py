@@ -52,16 +52,18 @@ class TestTimestampMixin:
         assert TimestampMixin is not None
 
     def test_timestampmixin_has_created_at_attribute(self) -> None:
-        """TimestampMixin should have created_at attribute."""
-        from app.models.base import TimestampMixin
+        """TimestampMixin should add created_at attribute to mapped models."""
+        test_model_class = get_test_model_class()
 
-        assert hasattr(TimestampMixin, "created_at")
+        # Check on the actual mapped model class, not the Mixin itself
+        assert hasattr(test_model_class, "created_at")
 
     def test_timestampmixin_has_updated_at_attribute(self) -> None:
-        """TimestampMixin should have updated_at attribute."""
-        from app.models.base import TimestampMixin
+        """TimestampMixin should add updated_at attribute to mapped models."""
+        test_model_class = get_test_model_class()
 
-        assert hasattr(TimestampMixin, "updated_at")
+        # Check on the actual mapped model class, not the Mixin itself
+        assert hasattr(test_model_class, "updated_at")
 
 
 class TestSoftDeleteMixin:
@@ -74,17 +76,19 @@ class TestSoftDeleteMixin:
         assert SoftDeleteMixin is not None
 
     def test_softdeletemixin_has_deleted_at_attribute(self) -> None:
-        """SoftDeleteMixin should have deleted_at attribute."""
-        from app.models.base import SoftDeleteMixin
+        """SoftDeleteMixin should add deleted_at attribute to mapped models."""
+        test_model_class = get_test_model_class()
 
-        assert hasattr(SoftDeleteMixin, "deleted_at")
+        # Check on the actual mapped model class, not the Mixin itself
+        assert hasattr(test_model_class, "deleted_at")
 
     def test_softdeletemixin_has_is_deleted_property(self) -> None:
-        """SoftDeleteMixin should have is_deleted property."""
-        from app.models.base import SoftDeleteMixin
+        """SoftDeleteMixin should add is_deleted property to mapped models."""
+        test_model_class = get_test_model_class()
 
-        # Check if is_deleted is defined (as property or hybrid_property)
-        assert hasattr(SoftDeleteMixin, "is_deleted")
+        # Check on the actual mapped model class, not the Mixin itself
+        # The is_deleted is a @property defined in the Mixin
+        assert hasattr(test_model_class, "is_deleted")
 
 
 class TestUUIDMixin:
@@ -97,10 +101,11 @@ class TestUUIDMixin:
         assert UUIDMixin is not None
 
     def test_uuidmixin_has_id_attribute(self) -> None:
-        """UUIDMixin should have id attribute."""
-        from app.models.base import UUIDMixin
+        """UUIDMixin should add id attribute to mapped models."""
+        test_model_class = get_test_model_class()
 
-        assert hasattr(UUIDMixin, "id")
+        # Check on the actual mapped model class, not the Mixin itself
+        assert hasattr(test_model_class, "id")
 
 
 # Define the test model at module level to avoid redefinition issues

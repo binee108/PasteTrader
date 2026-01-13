@@ -133,6 +133,43 @@ class LogLevel(str, Enum):
         return self.value
 
 
+class ScheduleStatus(str, Enum):
+    """Schedule execution state.
+
+    TAG: [SPEC-008] [SCHEDULE] [ENUM]
+
+    Defines the possible states of a schedule.
+    """
+
+    SCHEDULED = "scheduled"
+    PAUSED = "paused"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+    def __str__(self) -> str:
+        """Return the string value for serialization."""
+        return self.value
+
+
+class ExecutionHistoryStatus(str, Enum):
+    """Execution history state.
+
+    TAG: [SPEC-008] [EXECUTION_HISTORY] [ENUM]
+
+    Defines the possible states of a schedule execution history.
+    """
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+    def __str__(self) -> str:
+        """Return the string value for serialization."""
+        return self.value
+
+
 class ScheduleType(str, Enum):
     """Schedule type classification.
 
@@ -153,10 +190,12 @@ class ScheduleType(str, Enum):
 
 __all__ = [
     "AuthMode",
+    "ExecutionHistoryStatus",
     "ExecutionStatus",
     "LogLevel",
     "ModelProvider",
     "NodeType",
+    "ScheduleStatus",
     "ScheduleType",
     "ToolType",
     "TriggerType",
