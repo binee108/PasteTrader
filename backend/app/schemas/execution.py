@@ -1,6 +1,6 @@
 """Pydantic schemas for execution tracking models.
 
-TAG: [SPEC-006] [SCHEMAS] [EXECUTION]
+TAG: [SPEC-007] [SCHEMAS] [EXECUTION]
 REQ: REQ-001 - WorkflowExecution Schema Definitions
 REQ: REQ-002 - NodeExecution Schema Definitions
 REQ: REQ-003 - ExecutionLog Schema Definitions

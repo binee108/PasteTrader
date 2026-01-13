@@ -1,6 +1,6 @@
 """Base Pydantic schemas with common patterns.
 
-TAG: [SPEC-006] [SCHEMAS] [BASE]
+TAG: [SPEC-007] [SCHEMAS] [BASE]
 REQ: REQ-001 - Base Schema Definitions
 REQ: REQ-002 - Paginated Response Generic
 REQ: REQ-003 - Common Validators

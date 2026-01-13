@@ -1,6 +1,6 @@
 """Pydantic schemas for Workflow, Node, and Edge models.
 
-TAG: [SPEC-006] [SCHEMAS] [WORKFLOW] [NODE] [EDGE]
+TAG: [SPEC-007] [SCHEMAS] [WORKFLOW] [NODE] [EDGE]
 REQ: REQ-001 - Workflow Schema Definitions
 REQ: REQ-002 - Node Schema Definitions
 REQ: REQ-003 - Edge Schema Definitions

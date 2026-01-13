@@ -1,6 +1,6 @@
 """Pydantic schemas for request/response validation.
 
-TAG: [SPEC-006] [SCHEMAS]
+TAG: [SPEC-007] [SCHEMAS]
 REQ: REQ-001 - Schema Package Exports
 
 This package contains all Pydantic models for API validation.
