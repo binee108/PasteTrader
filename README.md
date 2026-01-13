@@ -255,6 +255,7 @@ npm run dev
 - [SPEC-003: Workflow Domain Models](.moai/specs/SPEC-003/spec.md) - 구현 완료
 - [SPEC-004: Tool & Agent Registry](.moai/specs/SPEC-004/spec.md) - 구현 완료
 - [SPEC-005: Execution Tracking Models](.moai/specs/SPEC-005/spec.md) - 구현 완료
+- [SPEC-006: Schedule Configuration Model](.moai/specs/SPEC-006/spec.md) - 구현 완료
 - [SPEC-007: Workflow Execution Engine](.moai/specs/SPEC-007/spec.md) - 구현 완료
 
 ## 테스트
@@ -297,6 +298,7 @@ open htmlcov/index.html
 - **SPEC-003**: Workflow Domain Models (Workflow, Node, Edge 도메인 모델)
 - **SPEC-004**: Tool & Agent Registry (Tool 및 Agent 레지스트리 모델, 암호화 유틸리티)
 - **SPEC-005**: Execution Tracking Models (WorkflowExecution, NodeExecution, ExecutionLog)
+- **SPEC-006**: Schedule Configuration Model (스케줄 설정 모델, APScheduler 통합)
 - **SPEC-007**: Workflow Execution Engine (워크플로우 실행 엔진)
 
 ## 연락처

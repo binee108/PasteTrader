@@ -7,7 +7,7 @@
 | SPEC ID | SPEC-006 |
 | Title | Schedule Configuration Model |
 | Created | 2026-01-13 |
-| Status | Draft |
+| Status | Implemented |
 | Priority | Medium (P1) |
 | Lifecycle | spec-anchored |
 | Author | workflow-spec |
