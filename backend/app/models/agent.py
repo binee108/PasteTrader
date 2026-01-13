@@ -1,6 +1,6 @@
 """Agent model for LLM-based AI agents.
 
-TAG: [SPEC-004] [DATABASE] [AGENT]
+TAG: [SPEC-009] [DATABASE] [AGENT]
 REQ: REQ-003 - Agent Model Definition
 REQ: REQ-004 - Model Provider Enum
 REQ: REQ-005 - User-Agent Relationship
@@ -14,18 +14,40 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, Boolean, ForeignKey, String, Text
+from sqlalchemy import Boolean, Column, ForeignKey, String, Table, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import JSON
 
 from app.models.base import GUID, Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
-from app.models.enums import ModelProvider
 
 if TYPE_CHECKING:
+    from app.models.tool import Tool
     from app.models.user import User
 
 # Use JSONB for PostgreSQL, JSON for other databases (like SQLite for testing)
 JSONType = JSON().with_variant(JSONB(), "postgresql")
+
+# Association table for many-to-many relationship between Agent and Tool
+# CASCADE delete: When an agent is deleted, remove its tool associations
+#                   When a tool is deleted, remove its agent associations
+agent_tools = Table(
+    "agent_tools",
+    Base.metadata,
+    Column(
+        "agent_id",
+        GUID(),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "tool_id",
+        GUID(),
+        ForeignKey("tools.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    comment="Many-to-many relationship between agents and tools",
+)
 
 
 class Agent(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
@@ -37,14 +59,11 @@ class Agent(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     Attributes:
         id: UUID primary key (from UUIDMixin)
         owner_id: UUID of the user who owns this agent
-        name: Display name of the agent
+        name: Display name of the agent (unique)
         description: Optional description of the agent's purpose
-        model_provider: LLM provider (anthropic, openai, glm)
-        model_name: Specific model identifier
-        system_prompt: System prompt for the agent
-        config: JSONB configuration for model parameters
-        tools: List of tool UUIDs the agent can use
-        memory_config: Memory/context configuration
+        system_prompt: System prompt for the agent (required)
+        model_config: JSONB configuration for model parameters
+        tools: Many-to-many relationship with Tool
         is_active: Whether the agent is active and usable
         is_public: Whether the agent is publicly accessible
         created_at: Timestamp of creation (from TimestampMixin)
@@ -65,7 +84,9 @@ class Agent(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     # Basic information
     name: Mapped[str] = mapped_column(
         String(255),
+        unique=True,
         nullable=False,
+        index=True,
     )
 
     description: Mapped[str | None] = mapped_column(
@@ -73,41 +94,18 @@ class Agent(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
         nullable=True,
     )
 
-    # Model configuration
-    model_provider: Mapped[ModelProvider] = mapped_column(
-        String(50),
-        nullable=False,
-    )
-
-    model_name: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-    )
-
-    system_prompt: Mapped[str | None] = mapped_column(
+    # System prompt (required)
+    system_prompt: Mapped[str] = mapped_column(
         Text,
-        nullable=True,
+        nullable=False,
     )
 
-    # JSON fields for flexible configuration (JSONB on PostgreSQL, JSON on SQLite)
-    config: Mapped[dict[str, Any]] = mapped_column(
+    # Model configuration as JSONB (replaces separate model_provider/model_name fields)
+    model_config: Mapped[dict[str, Any]] = mapped_column(
         JSONType,
         nullable=False,
         default=dict,
         server_default="{}",
-    )
-
-    # List of tool UUIDs as JSON array
-    tools: Mapped[list[str]] = mapped_column(
-        JSONType,
-        nullable=False,
-        default=list,
-        server_default="[]",
-    )
-
-    memory_config: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONType,
-        nullable=True,
     )
 
     # Status flags
@@ -116,6 +114,7 @@ class Agent(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
         nullable=False,
         default=True,
         server_default="true",
+        index=True,
     )
 
     is_public: Mapped[bool] = mapped_column(
@@ -131,11 +130,18 @@ class Agent(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
         back_populates="agents",
     )
 
+    # Note: tools relationship manages Tool connections via agent_tools table
+    tools: Mapped[list[Tool]] = relationship(
+        "Tool",
+        secondary=agent_tools,
+        back_populates="agents",
+        lazy="selectin",
+    )
+
     def __repr__(self) -> str:
         """Return string representation of the agent."""
-        return (
-            f"<Agent(id={self.id}, name='{self.name}', provider={self.model_provider})>"
-        )
+        provider = self.model_config.get("provider", "unknown")
+        return f"<Agent(id={self.id}, name='{self.name}', provider={provider})>"
 
 
-__all__ = ["Agent"]
+__all__ = ["Agent", "agent_tools"]
