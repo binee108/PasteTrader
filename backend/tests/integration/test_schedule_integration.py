@@ -5,9 +5,7 @@ REQ: REQ-004 - Workflow-Schedule Relationship
 REQ: REQ-005 - APScheduler Job ID Management
 """
 
-import uuid
 
-import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import ScheduleType

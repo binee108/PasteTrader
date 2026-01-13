@@ -45,7 +45,6 @@ from app.services.execution_service import (
     NodeExecutionService,
     WorkflowExecutionService,
 )
-
 from app.services.workflow_service import WorkflowService
 
 router = APIRouter()
@@ -233,13 +232,13 @@ async def create_execution(
     # Validate workflow exists
     workflow_service = WorkflowService(db)
     workflow = await workflow_service.get(execution_data.workflow_id)
-    
+
     if workflow is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Workflow with ID {execution_data.workflow_id} not found",
         )
-    
+
     # Create execution
     execution = await WorkflowExecutionService.create(
         db,
@@ -247,7 +246,7 @@ async def create_execution(
         data=execution_data,
     )
     await db.commit()
-    
+
     return WorkflowExecutionResponse.model_validate(execution)
 
 

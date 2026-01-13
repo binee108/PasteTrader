@@ -8,10 +8,6 @@ AC: AC-001 to AC-010 - Schedule Model Acceptance Criteria
 import uuid
 from datetime import UTC, datetime
 
-import pytest
-from sqlalchemy import String
-from sqlalchemy.orm import Mapped, mapped_column
-
 from app.models.base import Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
 from app.models.enums import ScheduleType
 
@@ -53,7 +49,7 @@ class TestScheduleModel:
             "deleted_at": datetime | None,
         }
 
-        for field_name, expected_type in schedule_fields.items():
+        for field_name, _expected_type in schedule_fields.items():
             assert hasattr(
                 Schedule, field_name
             ), f"Schedule should have {field_name} field"
@@ -135,11 +131,6 @@ class TestScheduleModel:
         index_names = {idx.name for idx in table.indexes}
 
         # Check for expected indexes
-        expected_indexes = {
-            "ix_schedules_workflow_id",
-            "ix_schedules_user_id",
-            "ix_schedules_schedule_type",
-        }
 
         # At least some core indexes should exist
         assert len(index_names) > 0, "Schedule table should have indexes"

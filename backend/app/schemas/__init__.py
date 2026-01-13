@@ -8,6 +8,16 @@ Exports all schemas for convenient importing.
 """
 
 # Base schemas and utilities
+# Agent schemas
+from app.schemas.agent import (
+    AgentCreate,
+    AgentResponse,
+    AgentTestRequest,
+    AgentTestResponse,
+    AgentToolsUpdate,
+    AgentUpdate,
+    ModelConfig,
+)
 from app.schemas.base import (
     BaseResponse,
     BaseSchema,
@@ -51,6 +61,16 @@ from app.schemas.execution import (
     WorkflowExecutionWithNodes,
 )
 
+# Tool schemas
+from app.schemas.tool import (
+    ToolCreate,
+    ToolDetailResponse,
+    ToolResponse,
+    ToolTestRequest,
+    ToolTestResponse,
+    ToolUpdate,
+)
+
 # Workflow schemas
 from app.schemas.workflow import (
     EdgeBase,
@@ -78,6 +98,13 @@ from app.schemas.workflow import (
 )
 
 __all__ = [
+    # Agent schemas
+    "AgentCreate",
+    "AgentResponse",
+    "AgentTestRequest",
+    "AgentTestResponse",
+    "AgentToolsUpdate",
+    "AgentUpdate",
     # Base schemas
     "BaseResponse",
     "BaseSchema",
@@ -102,6 +129,7 @@ __all__ = [
     "ExecutionRetry",
     "ExecutionStatistics",
     "MessageResponse",
+    "ModelConfig",
     "NameField",
     "NodeBase",
     "NodeBatchCreate",
@@ -120,6 +148,13 @@ __all__ = [
     "PaginationParams",
     "RetryConfig",
     "SuccessResponse",
+    # Tool schemas
+    "ToolCreate",
+    "ToolDetailResponse",
+    "ToolResponse",
+    "ToolTestRequest",
+    "ToolTestResponse",
+    "ToolUpdate",
     "VersionField",
     "WorkflowBase",
     "WorkflowCreate",
