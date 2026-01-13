@@ -326,3 +326,54 @@ class TestEnumValueError:
 
         with pytest.raises(ValueError, match="invalid_value"):
             ToolType("invalid_value")
+
+
+class TestScheduleType:
+    """Test ScheduleType enum values and behavior.
+
+    TAG: [SPEC-006] [SCHEDULE] [ENUM]
+    REQ: REQ-002 - ScheduleType Enum Definition
+    """
+
+    def test_scheduletype_has_cron_value(self) -> None:
+        """ScheduleType should have 'cron' value."""
+        from app.models.enums import ScheduleType
+
+        assert ScheduleType.CRON == "cron"
+        assert ScheduleType.CRON.value == "cron"
+
+    def test_scheduletype_has_interval_value(self) -> None:
+        """ScheduleType should have 'interval' value."""
+        from app.models.enums import ScheduleType
+
+        assert ScheduleType.INTERVAL == "interval"
+        assert ScheduleType.INTERVAL.value == "interval"
+
+    def test_scheduletype_has_date_value(self) -> None:
+        """ScheduleType should have 'date' value."""
+        from app.models.enums import ScheduleType
+
+        assert ScheduleType.DATE == "date"
+        assert ScheduleType.DATE.value == "date"
+
+    def test_scheduletype_is_string_compatible(self) -> None:
+        """ScheduleType should serialize to string value."""
+        from app.models.enums import ScheduleType
+
+        assert str(ScheduleType.CRON) == "cron"
+        assert f"{ScheduleType.INTERVAL}" == "interval"
+
+    def test_scheduletype_from_string(self) -> None:
+        """ScheduleType should deserialize from string value."""
+        from app.models.enums import ScheduleType
+
+        assert ScheduleType("cron") == ScheduleType.CRON
+        assert ScheduleType("interval") == ScheduleType.INTERVAL
+        assert ScheduleType("date") == ScheduleType.DATE
+
+    def test_invalid_scheduletype_raises_valueerror(self) -> None:
+        """Invalid ScheduleType value should raise ValueError."""
+        from app.models.enums import ScheduleType
+
+        with pytest.raises(ValueError):
+            ScheduleType("invalid_value")
