@@ -7,7 +7,7 @@ llm:
   # - claude-only: Use Claude for all phases (Opus/Sonnet based on pricing plan)
   # - mashup: Plan with Claude, Run/Sync with GLM (balanced)
   # - glm-only: Use GLM for all phases (lowest cost)
-  mode: claude-only
+  mode: mashup
 
   # Environment variable name for GLM API token
   # User must set this in their shell profile (~/.zshrc, ~/.bashrc)
