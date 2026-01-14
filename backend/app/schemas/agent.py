@@ -10,9 +10,9 @@ This module defines Pydantic schemas for Agent API validation.
 from __future__ import annotations
 
 from typing import Any
-from uuid import UUID
+from uuid import UUID  # noqa: TC003 - Required at runtime for Pydantic v2
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from app.schemas.base import (
     BaseResponse,
@@ -77,8 +77,6 @@ class AgentBase(BaseSchema):
 class AgentCreate(AgentBase):
     """Schema for creating a new agent."""
 
-    pass
-
 
 # =============================================================================
 # Update Schemas
@@ -96,9 +94,13 @@ class AgentUpdate(BaseSchema):
     model_provider: str | None = Field(default=None, description="Model provider")
     model_name: str | None = Field(default=None, description="Model name")
     system_prompt: str | None = Field(default=None, description="System prompt")
-    config: dict[str, Any] | None = Field(default=None, description="Model configuration")
+    config: dict[str, Any] | None = Field(
+        default=None, description="Model configuration"
+    )
     tools: list[str] | None = Field(default=None, description="Tool UUIDs")
-    memory_config: dict[str, Any] | None = Field(default=None, description="Memory config")
+    memory_config: dict[str, Any] | None = Field(
+        default=None, description="Memory config"
+    )
     is_active: bool | None = Field(default=None, description="Active status")
     is_public: bool | None = Field(default=None, description="Public status")
 
@@ -148,8 +150,8 @@ class AgentToolAdd(BaseSchema):
 __all__ = [
     "AgentBase",
     "AgentCreate",
-    "AgentUpdate",
-    "AgentResponse",
     "AgentListResponse",
+    "AgentResponse",
     "AgentToolAdd",
+    "AgentUpdate",
 ]

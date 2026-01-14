@@ -11,7 +11,7 @@ from uuid import uuid4
 import pytest
 from fastapi import status
 from httpx import AsyncClient
-
+from unittest.mock import MagicMock, AsyncMock, patch
 
 # =============================================================================
 # Agent Endpoint Tests
@@ -89,7 +89,9 @@ class TestAgentEndpoints:
     ):
         """Test successful agent retrieval."""
         # Create agent
-        create_response = await async_client.post("/api/v1/agents/", json=sample_agent_data)
+        create_response = await async_client.post(
+            "/api/v1/agents/", json=sample_agent_data
+        )
         agent_id = create_response.json()["id"]
 
         # Get agent
@@ -113,12 +115,16 @@ class TestAgentEndpoints:
     ):
         """Test successful agent update."""
         # Create agent
-        create_response = await async_client.post("/api/v1/agents/", json=sample_agent_data)
+        create_response = await async_client.post(
+            "/api/v1/agents/", json=sample_agent_data
+        )
         agent_id = create_response.json()["id"]
 
         # Update agent
         update_data = {"name": "Updated Agent", "is_active": False}
-        response = await async_client.put(f"/api/v1/agents/{agent_id}", json=update_data)
+        response = await async_client.put(
+            f"/api/v1/agents/{agent_id}", json=update_data
+        )
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
@@ -131,7 +137,9 @@ class TestAgentEndpoints:
     ):
         """Test successful agent deletion."""
         # Create agent
-        create_response = await async_client.post("/api/v1/agents/", json=sample_agent_data)
+        create_response = await async_client.post(
+            "/api/v1/agents/", json=sample_agent_data
+        )
         agent_id = create_response.json()["id"]
 
         # Delete agent
@@ -155,7 +163,9 @@ class TestAgentEndpoints:
     ):
         """Test successfully adding a tool to an agent."""
         # Create agent
-        create_response = await async_client.post("/api/v1/agents/", json=sample_agent_data)
+        create_response = await async_client.post(
+            "/api/v1/agents/", json=sample_agent_data
+        )
         agent_id = create_response.json()["id"]
 
         # Add tool to agent
@@ -185,7 +195,9 @@ class TestAgentEndpoints:
     ):
         """Test adding duplicate tool returns 409."""
         # Create agent
-        create_response = await async_client.post("/api/v1/agents/", json=sample_agent_data)
+        create_response = await async_client.post(
+            "/api/v1/agents/", json=sample_agent_data
+        )
         agent_id = create_response.json()["id"]
 
         # Add tool first time
@@ -209,7 +221,9 @@ class TestAgentEndpoints:
     ):
         """Test successfully removing a tool from an agent."""
         # Create agent
-        create_response = await async_client.post("/api/v1/agents/", json=sample_agent_data)
+        create_response = await async_client.post(
+            "/api/v1/agents/", json=sample_agent_data
+        )
         agent_id = create_response.json()["id"]
 
         # Add tool
@@ -281,3 +295,220 @@ class TestAgentEndpoints:
         data = response.json()
         assert len(data["items"]) == 2
         assert data["total"] >= 5
+
+
+# =============================================================================
+# Mock-Based Exception Handling Tests (Uncovered Paths)
+# =============================================================================
+
+
+class TestAgentAPIExceptionHandling:
+    """Mock-based tests for Agent API exception handling paths.
+
+    These tests use unittest.mock to inject exceptions into the service layer,
+    testing error handling paths that are difficult to trigger through
+    normal integration tests.
+
+    Covers lines:
+    - list_agents generic exception (122-126)
+    - create_agent service error (152-160)
+    - get_agent generic exception (188-200)
+    - update_agent generic exception (230-240)
+    - delete_agent generic exception (265-274)
+    - add_tool_to_agent generic exception (310-325)
+    - remove_tool_from_agent generic exception (355-365)
+    """
+
+    @pytest.fixture
+    def sample_agent_data(self) -> dict:
+        """Sample agent creation data."""
+        return {
+            "name": "Test Agent",
+            "description": "A test AI agent",
+            "model_provider": "anthropic",
+            "model_name": "claude-3-5-sonnet-20241022",
+            "system_prompt": "You are a helpful assistant.",
+            "config": {"temperature": 0.7, "max_tokens": 2000},
+            "tools": [],
+            "memory_config": {"max_turns": 10},
+            "is_active": True,
+            "is_public": False,
+        }
+
+    @pytest.mark.asyncio
+    async def test_list_agents_generic_exception(self, async_client: AsyncClient):
+        """Test list agents returns 500 on unexpected exception.
+
+        Tests lines 122-126 in agents.py where generic Exception
+        is caught and converted to HTTP 500.
+        """
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_service = MagicMock()
+        mock_service.list.side_effect = Exception("Database connection failed")
+
+        with patch("app.api.v1.agents.AgentService", return_value=mock_service):
+            response = await async_client.get("/api/v1/agents/")
+
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert "Database connection failed" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_list_agents_count_exception(self, async_client: AsyncClient):
+        """Test list agents returns 500 when count() fails.
+
+        Tests lines 122-126 in agents.py where Exception during count()
+        is caught and converted to HTTP 500.
+        """
+        mock_service = MagicMock()
+        mock_service.list = AsyncMock(return_value=[])  # List succeeds
+        mock_service.count = AsyncMock(side_effect=Exception("Count query failed"))
+
+        with patch("app.api.v1.agents.AgentService", return_value=mock_service):
+            response = await async_client.get("/api/v1/agents/")
+
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            # The error message may vary depending on implementation
+            assert "Count query failed" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_create_agent_service_error(self, async_client: AsyncClient):
+        """Test create agent returns 400 on AgentServiceError.
+
+        Tests lines 152-160 in agents.py where AgentServiceError
+        is caught and converted to HTTP 400.
+        """
+        from app.services.agent_service import AgentServiceError
+
+        mock_service = MagicMock()
+        mock_service.create = AsyncMock(
+            side_effect=AgentServiceError("Invalid agent configuration")
+        )
+
+        with patch("app.api.v1.agents.AgentService", return_value=mock_service):
+            agent_data = {
+                "name": "Test Agent",
+                "model_provider": "anthropic",
+                "model_name": "claude-3-5-sonnet-20241022",
+            }
+            response = await async_client.post("/api/v1/agents/", json=agent_data)
+
+            assert response.status_code == status.HTTP_400_BAD_REQUEST
+            assert "Invalid agent configuration" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_get_agent_generic_exception(self, async_client: AsyncClient):
+        """Test get agent returns 500 on unexpected exception.
+
+        Tests lines 188-200 in agents.py where generic Exception
+        is caught and converted to HTTP 500.
+        """
+        agent_id = uuid4()
+
+        mock_service = MagicMock()
+        mock_service.get = AsyncMock(side_effect=Exception("Unexpected database error"))
+
+        with patch("app.api.v1.agents.AgentService", return_value=mock_service):
+            response = await async_client.get(f"/api/v1/agents/{agent_id}")
+
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert "Unexpected database error" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_update_agent_generic_exception(self, async_client: AsyncClient):
+        """Test update agent returns 500 on unexpected exception.
+
+        Tests lines 230-240 in agents.py where generic Exception
+        is caught and converted to HTTP 500.
+        """
+        agent_id = uuid4()
+        update_data = {"name": "Updated Agent"}
+
+        mock_service = MagicMock()
+        mock_service.update = AsyncMock(side_effect=Exception("Database update failed"))
+
+        with patch("app.api.v1.agents.AgentService", return_value=mock_service):
+            response = await async_client.put(
+                f"/api/v1/agents/{agent_id}", json=update_data
+            )
+
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert "Database update failed" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_delete_agent_generic_exception(self, async_client: AsyncClient):
+        """Test delete agent returns 500 on unexpected exception.
+
+        Tests lines 265-274 in agents.py where generic Exception
+        is caught and converted to HTTP 500.
+        """
+        agent_id = uuid4()
+
+        mock_service = MagicMock()
+        mock_service.delete = AsyncMock(
+            side_effect=Exception("Database deletion failed")
+        )
+
+        with patch("app.api.v1.agents.AgentService", return_value=mock_service):
+            response = await async_client.delete(f"/api/v1/agents/{agent_id}")
+
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert "Database deletion failed" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_add_tool_to_agent_generic_exception(
+        self, async_client: AsyncClient, sample_agent_data: dict
+    ):
+        """Test add tool to agent returns 500 on unexpected exception.
+
+        Tests lines 310-325 in agents.py where generic Exception
+        is caught and converted to HTTP 500.
+        """
+        # Create agent first
+        create_response = await async_client.post(
+            "/api/v1/agents/", json=sample_agent_data
+        )
+        agent_id = create_response.json()["id"]
+        tool_id = uuid4()
+
+        mock_service = MagicMock()
+        mock_service.add_tool = AsyncMock(
+            side_effect=Exception("Tool association failed")
+        )
+
+        with patch("app.api.v1.agents.AgentService", return_value=mock_service):
+            response = await async_client.post(
+                f"/api/v1/agents/{agent_id}/tools", json={"tool_id": str(tool_id)}
+            )
+
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert "Tool association failed" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_remove_tool_from_agent_generic_exception(
+        self, async_client: AsyncClient, sample_agent_data: dict
+    ):
+        """Test remove tool from agent returns 500 on unexpected exception.
+
+        Tests lines 355-365 in agents.py where generic Exception
+        is caught and converted to HTTP 500.
+        """
+        # Create agent first
+        create_response = await async_client.post(
+            "/api/v1/agents/", json=sample_agent_data
+        )
+        agent_id = create_response.json()["id"]
+        tool_id = uuid4()
+
+        mock_service = MagicMock()
+        mock_service.remove_tool = AsyncMock(
+            side_effect=Exception("Tool removal failed")
+        )
+
+        with patch("app.api.v1.agents.AgentService", return_value=mock_service):
+            response = await async_client.delete(
+                f"/api/v1/agents/{agent_id}/tools/{tool_id}"
+            )
+
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert "Tool removal failed" in response.json()["detail"]

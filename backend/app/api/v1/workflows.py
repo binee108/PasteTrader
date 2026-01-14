@@ -14,16 +14,18 @@ and graph updates for the visual editor.
 from __future__ import annotations
 
 from typing import Annotated, Any
-
-from fastapi import APIRouter, Body, HTTPException, Query, status
-from pydantic import BaseModel, Field
 from uuid import UUID
+
+from fastapi import APIRouter, HTTPException, Query, status
+from pydantic import BaseModel, Field
 
 from app.api.deps import (  # noqa: TC001 - Required at runtime for FastAPI
     DBSession,
     Pagination,
 )
-from app.models.enums import TriggerType  # noqa: TC001 - Required at runtime for FastAPI
+from app.models.enums import (
+    TriggerType,
+)
 from app.models.workflow import Edge, Node
 from app.schemas.base import PaginatedResponse
 from app.schemas.execution import (
@@ -474,7 +476,7 @@ async def execute_workflow(
             trigger_type=TriggerType.MANUAL,
             input_data=input_data,
             context=ExecutionContext(),
-            metadata=ExecutionMetadata(),  # Use alias name, not field name
+            metadata_=ExecutionMetadata(),
         )
 
         # Create the execution

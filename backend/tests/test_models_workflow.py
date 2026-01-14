@@ -392,7 +392,7 @@ def get_mock_classes():
         class TestUserWorkflow(UUIDMixin, Base):
             """Mock User model for testing FK references."""
 
-            __tablename__ = "users"
+            __tablename__ = "test_workflow_users"
             __table_args__: ClassVar[dict[str, bool]] = {"extend_existing": True}
 
             name: Mapped[str] = mapped_column(String(100), nullable=False)

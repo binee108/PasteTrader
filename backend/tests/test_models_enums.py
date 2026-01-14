@@ -375,7 +375,7 @@ class TestScheduleType:
         """Invalid ScheduleType value should raise ValueError."""
         from app.models.enums import ScheduleType
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="invalid_value"):
             ScheduleType("invalid_value")
 
 
@@ -431,7 +431,7 @@ class TestScheduleStatus:
         """Invalid ScheduleStatus value should raise ValueError."""
         from app.models.enums import ScheduleStatus
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="invalid_value"):
             ScheduleStatus("invalid_value")
 
 
@@ -481,5 +481,5 @@ class TestExecutionHistoryStatus:
         """Invalid ExecutionHistoryStatus value should raise ValueError."""
         from app.models.enums import ExecutionHistoryStatus
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="invalid_value"):
             ExecutionHistoryStatus("invalid_value")

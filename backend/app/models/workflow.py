@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
     JSON,
-    Boolean,
     CheckConstraint,
     DateTime,
     Enum as SQLEnum,

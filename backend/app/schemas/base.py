@@ -20,7 +20,8 @@ from pydantic import BaseModel, ConfigDict, Field
 T = TypeVar("T")
 
 # Common field definitions for reuse
-ConfigField = Field(
+# Field() returns FieldInfo, but annotating as Any for flexible reuse
+ConfigField: Any = Field(
     default_factory=dict,
     description="Configuration object (JSON)",
     examples=[{"timeout": 300, "retry": True}],

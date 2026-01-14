@@ -11,14 +11,13 @@ This module defines Pydantic schemas for Tool API validation.
 from __future__ import annotations
 
 from typing import Any
-from uuid import UUID
+from uuid import UUID  # noqa: TC003 - Required at runtime for Pydantic v2
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from app.schemas.base import (
     BaseResponse,
     BaseSchema,
-    ConfigField,
     DescriptionField,
     NameField,
     OptionalNameField,
@@ -79,8 +78,6 @@ class ToolBase(BaseSchema):
 class ToolCreate(ToolBase):
     """Schema for creating a new tool."""
 
-    pass
-
 
 # =============================================================================
 # Update Schemas
@@ -96,7 +93,9 @@ class ToolUpdate(BaseSchema):
     name: str | None = OptionalNameField
     description: str | None = Field(default=None, max_length=2000)
     tool_type: str | None = Field(default=None, description="Tool type")
-    config: dict[str, Any] | None = Field(default=None, description="Tool configuration")
+    config: dict[str, Any] | None = Field(
+        default=None, description="Tool configuration"
+    )
     input_schema: dict[str, Any] | None = Field(
         default=None, description="Input JSON Schema"
     )
@@ -106,7 +105,9 @@ class ToolUpdate(BaseSchema):
     auth_config: dict[str, Any] | None = Field(
         default=None, description="Authentication configuration"
     )
-    rate_limit: dict[str, Any] | None = Field(default=None, description="Rate limit config")
+    rate_limit: dict[str, Any] | None = Field(
+        default=None, description="Rate limit config"
+    )
     is_active: bool | None = Field(default=None, description="Active status")
     is_public: bool | None = Field(default=None, description="Public status")
 
@@ -177,9 +178,9 @@ class ToolTestResponse(BaseSchema):
 __all__ = [
     "ToolBase",
     "ToolCreate",
-    "ToolUpdate",
-    "ToolResponse",
     "ToolListResponse",
+    "ToolResponse",
     "ToolTestRequest",
     "ToolTestResponse",
+    "ToolUpdate",
 ]

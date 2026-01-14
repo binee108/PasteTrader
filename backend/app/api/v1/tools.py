@@ -16,7 +16,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.deps import DBSession, Pagination
+from app.api.deps import (  # noqa: TC001 - Needed at runtime for FastAPI DI
+    DBSession,
+    Pagination,
+)
 from app.schemas.base import PaginatedResponse
 from app.schemas.tool import (
     ToolCreate,
