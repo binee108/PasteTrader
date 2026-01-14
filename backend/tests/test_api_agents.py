@@ -295,6 +295,38 @@ class TestAgentEndpoints:
         data = response.json()
         assert len(data["items"]) == 2
         assert data["total"] >= 5
+        assert data["page"] == 1
+        assert data["size"] == 2
+
+    @pytest.mark.asyncio
+    async def test_list_agents_response_includes_isoformat(
+        self, async_client: AsyncClient, sample_agent_data: dict
+    ):
+        """Test list agents response includes created_at in ISO format.
+
+        Covers lines 101-114 in agents.py for the list comprehension with isoformat().
+        """
+        # Create an agent
+        await async_client.post("/api/v1/agents/", json=sample_agent_data)
+
+        # List agents
+        response = await async_client.get("/api/v1/agents/")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data["items"]) == 1
+
+        # Verify response includes all fields from AgentListResponse
+        agent = data["items"][0]
+        assert "id" in agent
+        assert "name" in agent
+        assert "model_provider" in agent
+        assert "model_name" in agent
+        assert "is_active" in agent
+        assert "is_public" in agent
+        assert "created_at" in agent
+        # Verify created_at is in ISO format (string)
+        assert isinstance(agent["created_at"], str)
 
 
 # =============================================================================
