@@ -1869,3 +1869,196 @@ class TestGraphUpdateMockBased:
         data = response2.json()
         assert len(data["nodes"]) == 1
         assert data["nodes"][0]["name"] == "Second Update Node"
+
+
+# =============================================================================
+# Workflow Execute Endpoint Tests
+# =============================================================================
+
+
+class TestWorkflowExecuteEndpoint:
+    """Test suite for workflow execute endpoint.
+
+    Tests the POST /api/v1/workflows/{workflow_id}/execute endpoint which
+    creates a workflow execution as a convenience wrapper around the
+    POST /api/v1/executions endpoint.
+
+    TAG: [SPEC-007] [TESTS] [API] [WORKFLOW] [EXECUTE]
+    REQ: REQ-001 - Workflow Execute Endpoint Tests
+    """
+
+    @pytest.fixture
+    async def active_workflow_id(self, async_client: AsyncClient):
+        """Create an active workflow and return its ID."""
+        response = await async_client.post(
+            "/api/v1/workflows/",
+            json={"name": "Active Workflow", "is_active": True},
+        )
+        return response.json()["id"]
+
+    @pytest.fixture
+    async def inactive_workflow_id(self, async_client: AsyncClient):
+        """Create an inactive workflow and return its ID."""
+        response = await async_client.post(
+            "/api/v1/workflows/",
+            json={"name": "Inactive Workflow", "is_active": False},
+        )
+        return response.json()["id"]
+
+    @pytest.mark.asyncio
+    async def test_execute_workflow_success(
+        self, async_client: AsyncClient, active_workflow_id: str
+    ):
+        """Test successful workflow execution returns 201.
+
+        Tests that executing an active workflow creates an execution
+        and returns WorkflowExecutionResponse.
+        """
+        response = await async_client.post(
+            f"/api/v1/workflows/{active_workflow_id}/execute"
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        assert data["id"] is not None
+        assert data["workflow_id"] == active_workflow_id
+        assert data["status"] == "pending"
+        assert data["trigger_type"] == "manual"
+        assert data["started_at"] is None
+        assert data["ended_at"] is None
+
+    @pytest.mark.asyncio
+    async def test_execute_workflow_with_input_data(
+        self, async_client: AsyncClient, active_workflow_id: str
+    ):
+        """Test workflow execution with custom input data.
+
+        Tests that input_data is properly passed to the execution.
+        """
+        input_data = {"test_param": "test_value", "number": 123}
+
+        response = await async_client.post(
+            f"/api/v1/workflows/{active_workflow_id}/execute",
+            json={"input_data": input_data},
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        assert data["input_data"] == input_data
+
+    @pytest.mark.asyncio
+    async def test_execute_workflow_not_found(
+        self, async_client: AsyncClient
+    ):
+        """Test executing non-existent workflow returns 404.
+
+        Tests that the endpoint returns 404 when workflow_id
+        does not exist.
+        """
+        from uuid import uuid4
+
+        non_existent_id = uuid4()
+
+        response = await async_client.post(
+            f"/api/v1/workflows/{non_existent_id}/execute"
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert "not found" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_execute_inactive_workflow_returns_400(
+        self, async_client: AsyncClient, inactive_workflow_id: str
+    ):
+        """Test executing inactive workflow returns 400.
+
+        Tests that the endpoint validates workflow is_active status
+        and returns 400 for inactive workflows.
+        """
+        response = await async_client.post(
+            f"/api/v1/workflows/{inactive_workflow_id}/execute"
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        detail = response.json()["detail"].lower()
+        assert "inactive" in detail or "active" in detail
+
+    @pytest.mark.asyncio
+    async def test_execute_workflow_response_schema(
+        self, async_client: AsyncClient, active_workflow_id: str
+    ):
+        """Test workflow execute response schema validation.
+
+        Tests that all required fields are present in the response.
+        """
+        response = await async_client.post(
+            f"/api/v1/workflows/{active_workflow_id}/execute"
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+
+        # Verify all required fields from WorkflowExecutionResponse
+        required_fields = [
+            "id",
+            "workflow_id",
+            "trigger_type",
+            "status",
+            "input_data",
+            "output_data",
+            "error_message",
+            "context",
+            "metadata_",
+            "created_at",
+            "updated_at",
+            "started_at",
+            "ended_at",
+        ]
+        for field in required_fields:
+            assert field in data, f"Missing field: {field}"
+
+    @pytest.mark.asyncio
+    async def test_execute_workflow_creates_pending_execution(
+        self, async_client: AsyncClient, active_workflow_id: str
+    ):
+        """Test that execution is created with PENDING status.
+
+        Tests that newly created executions have status='pending'
+        and trigger_type='manual'.
+        """
+        response = await async_client.post(
+            f"/api/v1/workflows/{active_workflow_id}/execute"
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        data = response.json()
+        assert data["status"] == "pending"
+        assert data["trigger_type"] == "manual"
+
+    @pytest.mark.asyncio
+    async def test_execute_workflow_internal_error_mock(
+        self, async_client: AsyncClient, sample_workflow_data
+    ):
+        """Test execute workflow returns 500 on unexpected error (mock).
+
+        Tests lines 490-496 in workflows.py where generic Exception
+        is caught and converted to HTTP 500.
+        """
+        # Create a workflow first
+        workflow_response = await async_client.post(
+            "/api/v1/workflows/", json=sample_workflow_data
+        )
+        workflow_id = workflow_response.json()["id"]
+
+        with patch("app.api.v1.workflows.WorkflowExecutionService") as mock_service:
+            mock_service.create = AsyncMock(
+                side_effect=Exception("Unexpected database error")
+            )
+
+            response = await async_client.post(
+                f"/api/v1/workflows/{workflow_id}/execute",
+                json={"input_data": {"test": "data"}},
+            )
+
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert "Failed to execute workflow" in response.json()["detail"]

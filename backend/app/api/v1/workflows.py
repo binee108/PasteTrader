@@ -13,17 +13,23 @@ and graph updates for the visual editor.
 
 from __future__ import annotations
 
-from typing import Annotated
-from uuid import UUID
+from typing import Annotated, Any
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Body, HTTPException, Query, status
+from pydantic import BaseModel, Field
+from uuid import UUID
 
 from app.api.deps import (  # noqa: TC001 - Required at runtime for FastAPI
     DBSession,
     Pagination,
 )
+from app.models.enums import TriggerType  # noqa: TC001 - Required at runtime for FastAPI
 from app.models.workflow import Edge, Node
 from app.schemas.base import PaginatedResponse
+from app.schemas.execution import (
+    WorkflowExecutionCreate,
+    WorkflowExecutionResponse,
+)
 from app.schemas.workflow import (
     EdgeBatchCreate,
     EdgeCreate,
@@ -39,6 +45,7 @@ from app.schemas.workflow import (
     WorkflowUpdate,
     WorkflowWithNodes,
 )
+from app.services.execution_service import WorkflowExecutionService
 from app.services.workflow_service import (
     DAGValidationError,
     EdgeNotFoundError,
@@ -53,6 +60,26 @@ from app.services.workflow_service import (
 )
 
 router = APIRouter()
+
+# =============================================================================
+# Request Schemas
+# =============================================================================
+
+
+class WorkflowExecuteRequest(BaseModel):
+    """Request schema for workflow execution.
+
+    A simplified schema for the execute endpoint that only allows
+    optional input data, while trigger_type, context, and metadata
+    are filled in automatically.
+    """
+
+    input_data: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional input data for the workflow execution (JSON)",
+        examples=[{"user_id": 123, "action": "process_order"}],
+    )
+
 
 # Temporary owner_id until auth is implemented
 TEMP_OWNER_ID = UUID("00000000-0000-0000-0000-000000000001")
@@ -387,6 +414,85 @@ async def duplicate_workflow(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to duplicate workflow: {e!s}",
+        ) from e
+
+
+@router.post(
+    "/{workflow_id}/execute",
+    response_model=WorkflowExecutionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Execute workflow",
+    description="Create and start a new execution for the specified workflow. Convenience wrapper around POST /api/v1/executions.",
+)
+async def execute_workflow(
+    db: DBSession,
+    workflow_id: UUID,
+    request: WorkflowExecuteRequest | None = None,
+) -> WorkflowExecutionResponse:
+    """Execute a workflow by creating a new workflow execution.
+
+    This is a convenience endpoint that wraps the execution creation API.
+    It validates the workflow exists and is active before creating the execution.
+
+    Args:
+        db: Database session.
+        workflow_id: UUID of the workflow to execute.
+        request: Optional execution request with input_data.
+
+    Returns:
+        Created workflow execution record.
+
+    Raises:
+        HTTPException: 404 if workflow not found.
+        HTTPException: 400 if workflow is inactive.
+    """
+    try:
+        # Get workflow to verify it exists and is active
+        workflow_service = WorkflowService(db)
+        workflow = await workflow_service.get(workflow_id)
+        if workflow is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Workflow {workflow_id} not found",
+            )
+
+        # Check if workflow is active
+        if not workflow.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Workflow {workflow_id} is not active. Only active workflows can be executed.",
+            )
+
+        # Get input data from request or default to empty dict
+        input_data = request.input_data if request and request.input_data else {}
+
+        # Create execution data with MANUAL trigger type
+        from app.schemas.execution import ExecutionContext, ExecutionMetadata
+
+        execution_data = WorkflowExecutionCreate(
+            workflow_id=workflow_id,
+            trigger_type=TriggerType.MANUAL,
+            input_data=input_data,
+            context=ExecutionContext(),
+            metadata=ExecutionMetadata(),  # Use alias name, not field name
+        )
+
+        # Create the execution
+        execution = await WorkflowExecutionService.create(
+            db,
+            workflow_id=workflow_id,
+            data=execution_data,
+        )
+        await db.commit()
+
+        return WorkflowExecutionResponse.model_validate(execution)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to execute workflow: {e!s}",
         ) from e
 
 
