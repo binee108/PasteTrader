@@ -23,9 +23,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 @pytest_asyncio.fixture
 async def workflow_id(async_client: AsyncClient, sample_workflow_data) -> str:
     """Create a workflow and return its ID."""
-    response = await async_client.post(
-        "/api/v1/workflows/", json=sample_workflow_data
-    )
+    response = await async_client.post("/api/v1/workflows/", json=sample_workflow_data)
     return response.json()["id"]
 
 
@@ -42,7 +40,9 @@ async def execution_id(
 
     # Create execution
     execution_data = {**sample_execution_data, "workflow_id": workflow_id}
-    execution_response = await async_client.post("/api/v1/executions/", json=execution_data)
+    execution_response = await async_client.post(
+        "/api/v1/executions/", json=execution_data
+    )
     return execution_response.json()["id"]
 
 
@@ -875,7 +875,9 @@ class TestExecutionErrorPaths:
     """Tests for error handling paths in executions.py."""
 
     @pytest.mark.asyncio
-    async def test_list_executions_without_workflow_filter(self, async_client: AsyncClient):
+    async def test_list_executions_without_workflow_filter(
+        self, async_client: AsyncClient
+    ):
         """Test listing executions without workflow_id returns empty result.
 
         Covers lines 173-181 in executions.py where workflow_id is None.
@@ -914,7 +916,9 @@ class TestExecutionErrorPaths:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     @pytest.mark.asyncio
-    async def test_list_node_executions_execution_not_found(self, async_client: AsyncClient):
+    async def test_list_node_executions_execution_not_found(
+        self, async_client: AsyncClient
+    ):
         """Test list node executions returns 404 for non-existent execution.
 
         Covers lines 448-453 in executions.py.
@@ -970,3 +974,217 @@ class TestExecutionErrorPaths:
         )
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
+
+# =============================================================================
+# Mock-Based Exception Handling Tests (Uncovered Paths)
+# =============================================================================
+
+
+class TestExecutionAPIExceptionHandling:
+    """Mock-based tests for Execution API exception handling paths.
+
+    These tests use unittest.mock to inject exceptions into the service layer,
+    testing error handling paths that are difficult to trigger through
+    normal integration tests.
+
+    Covers missing lines:
+    - create_execution workflow None (236-240)
+    - get_execution execution None (276-281)
+    - get_execution_detail execution None (307-311)
+    - cancel_execution ValueError (370-381)
+    - get_execution_statistics execution None (407-413)
+    - list_node_executions execution None (449-453)
+    - get_node_execution execution None (501-505)
+    - list_execution_logs execution None (559-563)
+    """
+
+    @pytest.mark.asyncio
+    async def test_get_execution_not_found_by_mock(self, async_client: AsyncClient):
+        """Test get execution returns 404 when execution not found.
+
+        Covers lines 276-281 in executions.py where
+        WorkflowExecutionService.get returns None.
+        """
+        from unittest.mock import AsyncMock, patch
+
+        execution_id = uuid4()
+
+        # Mock WorkflowExecutionService.get to return None
+        with patch(
+            "app.api.v1.executions.WorkflowExecutionService.get",
+            AsyncMock(return_value=None),
+        ):
+            response = await async_client.get(f"/api/v1/executions/{execution_id}")
+
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+            assert "not found" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_get_execution_detail_not_found_by_mock(
+        self, async_client: AsyncClient
+    ):
+        """Test get execution detail returns 404 when execution not found.
+
+        Covers lines 307-311 in executions.py where
+        WorkflowExecutionService.get_with_nodes returns None.
+        """
+        from unittest.mock import AsyncMock, patch
+
+        execution_id = uuid4()
+
+        # Mock WorkflowExecutionService.get_with_nodes to return None
+        with patch(
+            "app.api.v1.executions.WorkflowExecutionService.get_with_nodes",
+            AsyncMock(return_value=None),
+        ):
+            response = await async_client.get(
+                f"/api/v1/executions/{execution_id}/detail"
+            )
+
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+            assert "not found" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_cancel_execution_value_error_not_found(
+        self, async_client: AsyncClient
+    ):
+        """Test cancel execution returns 404 when ValueError contains 'not found'.
+
+        Covers lines 370-375 in executions.py where ValueError with
+        'not found' is caught.
+        """
+        from unittest.mock import AsyncMock, patch
+
+        execution_id = uuid4()
+
+        # Mock WorkflowExecutionService.cancel to raise ValueError with 'not found'
+        with patch(
+            "app.api.v1.executions.WorkflowExecutionService.cancel",
+            AsyncMock(side_effect=ValueError(f"Execution {execution_id} not found")),
+        ):
+            response = await async_client.post(
+                f"/api/v1/executions/{execution_id}/cancel"
+            )
+
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+            assert "not found" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_cancel_execution_value_error_invalid_state(
+        self, async_client: AsyncClient
+    ):
+        """Test cancel execution returns 400 when ValueError doesn't contain 'not found'.
+
+        Covers lines 376-380 in executions.py where ValueError without
+        'not found' is caught.
+        """
+        from unittest.mock import AsyncMock, patch
+
+        execution_id = uuid4()
+
+        # Mock WorkflowExecutionService.cancel to raise ValueError without 'not found'
+        with patch(
+            "app.api.v1.executions.WorkflowExecutionService.cancel",
+            AsyncMock(side_effect=ValueError("Execution is already completed")),
+        ):
+            response = await async_client.post(
+                f"/api/v1/executions/{execution_id}/cancel"
+            )
+
+            assert response.status_code == status.HTTP_400_BAD_REQUEST
+            assert "already completed" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_get_execution_statistics_not_found_by_mock(
+        self, async_client: AsyncClient
+    ):
+        """Test get execution statistics returns 404 when execution not found.
+
+        Covers lines 407-413 in executions.py where
+        WorkflowExecutionService.get_statistics returns None.
+        """
+        from unittest.mock import AsyncMock, patch
+
+        execution_id = uuid4()
+
+        # Mock WorkflowExecutionService.get_statistics to return None
+        with patch(
+            "app.api.v1.executions.WorkflowExecutionService.get_statistics",
+            AsyncMock(return_value=None),
+        ):
+            response = await async_client.get(
+                f"/api/v1/executions/{execution_id}/statistics"
+            )
+
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_list_node_executions_execution_not_found_by_mock(
+        self, async_client: AsyncClient
+    ):
+        """Test list node executions returns 404 when execution not found.
+
+        Covers lines 449-453 in executions.py where
+        WorkflowExecutionService.get returns None.
+        """
+        from unittest.mock import AsyncMock, patch
+
+        execution_id = uuid4()
+
+        # Mock WorkflowExecutionService.get to return None
+        with patch(
+            "app.api.v1.executions.WorkflowExecutionService.get",
+            AsyncMock(return_value=None),
+        ):
+            response = await async_client.get(
+                f"/api/v1/executions/{execution_id}/nodes"
+            )
+
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_get_node_execution_execution_not_found_by_mock(
+        self, async_client: AsyncClient
+    ):
+        """Test get node execution returns 404 when execution not found.
+
+        Covers lines 501-505 in executions.py where
+        WorkflowExecutionService.get returns None.
+        """
+        from unittest.mock import AsyncMock, patch
+
+        execution_id = uuid4()
+        node_execution_id = uuid4()
+
+        # Mock WorkflowExecutionService.get to return None
+        with patch(
+            "app.api.v1.executions.WorkflowExecutionService.get",
+            AsyncMock(return_value=None),
+        ):
+            response = await async_client.get(
+                f"/api/v1/executions/{execution_id}/nodes/{node_execution_id}"
+            )
+
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_list_execution_logs_execution_not_found_by_mock(
+        self, async_client: AsyncClient
+    ):
+        """Test list execution logs returns 404 when execution not found.
+
+        Covers lines 559-563 in executions.py where
+        WorkflowExecutionService.get returns None.
+        """
+        from unittest.mock import AsyncMock, patch
+
+        execution_id = uuid4()
+
+        # Mock WorkflowExecutionService.get to return None
+        with patch(
+            "app.api.v1.executions.WorkflowExecutionService.get",
+            AsyncMock(return_value=None),
+        ):
+            response = await async_client.get(f"/api/v1/executions/{execution_id}/logs")
+
+            assert response.status_code == status.HTTP_404_NOT_FOUND
