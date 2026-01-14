@@ -5,7 +5,7 @@ This module defines all v1 API routes.
 
 from fastapi import APIRouter
 
-from app.api.v1 import agents, executions, tools, workflows
+from app.api.v1 import agents, executions, tools, validation, workflows
 
 router = APIRouter()
 
@@ -14,6 +14,7 @@ router.include_router(workflows.router, prefix="/workflows", tags=["Workflows"])
 router.include_router(executions.router, prefix="/executions", tags=["Executions"])
 router.include_router(tools.router, prefix="/tools", tags=["Tools"])
 router.include_router(agents.router, prefix="/agents", tags=["Agents"])
+router.include_router(validation.router, tags=["Validation"])
 
 
 @router.get("/status", tags=["Status"])
