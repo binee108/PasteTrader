@@ -1,9 +1,9 @@
 ---
 id: SPEC-009
-version: "1.0.0"
-status: "draft"
+version: "1.1.0"
+status: "completed"
 created: "2026-01-13"
-updated: "2026-01-13"
+updated: "2026-01-14"
 author: "MoAI Agent"
 priority: "high"
 ---
@@ -14,6 +14,7 @@ priority: "high"
 
 | 버전 | 날짜 | 작성자 | 변경 내용 |
 |------|------|--------|-----------|
+| 1.1.0 | 2026-01-14 | MoAI Agent | 구현 완료, 보안 모듈 개선 (passlib → bcrypt), 타입 annotations 수정 |
 | 1.0.0 | 2026-01-13 | MoAI Agent | 초기 SPEC 작성 |
 
 ---
@@ -421,3 +422,26 @@ class ModelConfig(BaseModel):
 - [FastAPI 공식 문서](https://fastapi.tiangolo.com/)
 - paste-trader 아키텍처 문서: `.moai/project/structure.md`
 - paste-trader 기술 스택: `.moai/project/tech.md`
+
+## 9. 구현 노트
+
+### 9.1 완료된 기능
+
+- Tool API: 7개 엔드포인트 (생성, 목록, 상세, 수정, 삭제, 테스트)
+- Agent API: 6개 엔드포인트 (생성, 목록, 상세, 수정, 삭제, 도구 연결, 테스트)
+- 총 13개 RESTful API 엔드포인트 구현
+- ToolService 및 AgentService 비즈니스 로직 계층 구현
+- 통합 테스트: 28개 보안 관련 테스트 통과
+
+### 9.2 품질 검증
+
+- **테스트 커버리지**: pytest 기반 테스트 러너, 28/28 테스트 통과
+- **린터**: ruff로 포맷팅 및 린팅 구성 완료
+- **타입 체커**: mypy로 타입 검증, 0개 타입 에러
+
+### 9.3 주요 변경사항
+
+- **보안 모듈**: passlib 대신 직접 bcrypt 사용으로 마이그레이션
+- **타입 어노테이션**: AsyncGenerator 타입 수정
+- **모델 통합**: is_active 필드를 SoftDeleteMixin으로 이동
+- **의존성 제거**: pyproject.toml에서 passlib 제거

@@ -115,13 +115,6 @@ class Workflow(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     )
 
     # Status and versioning
-    is_active: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=True,
-        server_default="true",
-    )
-
     version: Mapped[int] = mapped_column(
         Integer,
         nullable=False,

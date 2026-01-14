@@ -176,13 +176,6 @@ class Schedule(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
         server_default="UTC",
     )
 
-    is_active: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=True,
-        server_default="true",
-    )
-
     # APScheduler integration
     job_id: Mapped[str | None] = mapped_column(
         String(255),
