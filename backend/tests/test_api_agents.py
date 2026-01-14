@@ -9,9 +9,28 @@ REQ: REQ-003 - Agent Filtering Tests
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from fastapi import status
 from httpx import AsyncClient
 from unittest.mock import MagicMock, AsyncMock, patch
+
+# =============================================================================
+# Module-Level Fixtures
+# =============================================================================
+
+
+@pytest_asyncio.fixture
+async def sample_tool_id(async_client: AsyncClient) -> str:
+    """Create a sample tool and return its ID."""
+    tool_data = {
+        "name": "Test Tool",
+        "tool_type": "http",
+        "config": {"url": "https://api.example.com"},
+        "input_schema": {},
+    }
+    response = await async_client.post("/api/v1/tools/", json=tool_data)
+    return response.json()["id"]
+
 
 # =============================================================================
 # Agent Endpoint Tests
@@ -36,18 +55,6 @@ class TestAgentEndpoints:
             "is_active": True,
             "is_public": False,
         }
-
-    @pytest.fixture
-    async def sample_tool_id(self, async_client: AsyncClient) -> str:
-        """Create a sample tool and return its ID."""
-        tool_data = {
-            "name": "Test Tool",
-            "tool_type": "http",
-            "config": {"url": "https://api.example.com"},
-            "input_schema": {},
-        }
-        response = await async_client.post("/api/v1/tools/", json=tool_data)
-        return response.json()["id"]
 
     @pytest.mark.asyncio
     async def test_list_agents_empty(self, async_client: AsyncClient):

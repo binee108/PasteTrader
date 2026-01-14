@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from fastapi import status
 from httpx import AsyncClient
 
@@ -19,6 +20,71 @@ from app.services.workflow_service import (
     DAGValidationError,
     InvalidNodeReferenceError,
 )
+
+# =============================================================================
+# Module-Level Async Fixtures
+# =============================================================================
+
+
+@pytest_asyncio.fixture
+async def workflow_id(async_client: AsyncClient, sample_workflow_data) -> str:
+    """Create a workflow and return its ID."""
+    response = await async_client.post(
+        "/api/v1/workflows/", json=sample_workflow_data
+    )
+    return response.json()["id"]
+
+
+@pytest_asyncio.fixture
+async def workflow_with_nodes(
+    async_client: AsyncClient, sample_workflow_data
+) -> tuple:
+    """Create a workflow with nodes and return IDs."""
+    # Create workflow
+    workflow_response = await async_client.post(
+        "/api/v1/workflows/", json=sample_workflow_data
+    )
+    workflow_id = workflow_response.json()["id"]
+
+    # Create nodes (using trigger type which doesn't require tool_id)
+    node_data = {
+        "name": "Test Node",
+        "node_type": "trigger",
+        "position_x": 100.0,
+        "position_y": 200.0,
+    }
+
+    node1_response = await async_client.post(
+        f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
+    )
+    node1_id = node1_response.json()["id"]
+
+    node2_response = await async_client.post(
+        f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
+    )
+    node2_id = node2_response.json()["id"]
+
+    return workflow_id, node1_id, node2_id
+
+
+@pytest_asyncio.fixture
+async def active_workflow_id(async_client: AsyncClient) -> str:
+    """Create an active workflow and return its ID."""
+    response = await async_client.post(
+        "/api/v1/workflows/",
+        json={"name": "Active Workflow", "is_active": True},
+    )
+    return response.json()["id"]
+
+
+@pytest_asyncio.fixture
+async def inactive_workflow_id(async_client: AsyncClient) -> str:
+    """Create an inactive workflow and return its ID."""
+    response = await async_client.post(
+        "/api/v1/workflows/",
+        json={"name": "Inactive Workflow", "is_active": False},
+    )
+    return response.json()["id"]
 
 # =============================================================================
 # Workflow Endpoint Tests
@@ -241,14 +307,6 @@ class TestWorkflowEndpoints:
 class TestNodeEndpoints:
     """Test suite for node API endpoints."""
 
-    @pytest.fixture
-    async def workflow_id(self, async_client: AsyncClient, sample_workflow_data):
-        """Create a workflow and return its ID."""
-        response = await async_client.post(
-            "/api/v1/workflows/", json=sample_workflow_data
-        )
-        return response.json()["id"]
-
     @pytest.mark.asyncio
     async def test_create_node_success(
         self, async_client: AsyncClient, workflow_id: str, sample_node_data
@@ -375,37 +433,6 @@ class TestNodeEndpoints:
 
 class TestEdgeEndpoints:
     """Test suite for edge API endpoints."""
-
-    @pytest.fixture
-    async def workflow_with_nodes(
-        self, async_client: AsyncClient, sample_workflow_data
-    ):
-        """Create a workflow with nodes and return IDs."""
-        # Create workflow
-        workflow_response = await async_client.post(
-            "/api/v1/workflows/", json=sample_workflow_data
-        )
-        workflow_id = workflow_response.json()["id"]
-
-        # Create nodes (using trigger type which doesn't require tool_id)
-        node_data = {
-            "name": "Test Node",
-            "node_type": "trigger",
-            "position_x": 100.0,
-            "position_y": 200.0,
-        }
-
-        node1_response = await async_client.post(
-            f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
-        )
-        node1_id = node1_response.json()["id"]
-
-        node2_response = await async_client.post(
-            f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
-        )
-        node2_id = node2_response.json()["id"]
-
-        return workflow_id, node1_id, node2_id
 
     @pytest.mark.asyncio
     async def test_create_edge_success(
@@ -1886,24 +1913,6 @@ class TestWorkflowExecuteEndpoint:
     TAG: [SPEC-007] [TESTS] [API] [WORKFLOW] [EXECUTE]
     REQ: REQ-001 - Workflow Execute Endpoint Tests
     """
-
-    @pytest.fixture
-    async def active_workflow_id(self, async_client: AsyncClient):
-        """Create an active workflow and return its ID."""
-        response = await async_client.post(
-            "/api/v1/workflows/",
-            json={"name": "Active Workflow", "is_active": True},
-        )
-        return response.json()["id"]
-
-    @pytest.fixture
-    async def inactive_workflow_id(self, async_client: AsyncClient):
-        """Create an inactive workflow and return its ID."""
-        response = await async_client.post(
-            "/api/v1/workflows/",
-            json={"name": "Inactive Workflow", "is_active": False},
-        )
-        return response.json()["id"]
 
     @pytest.mark.asyncio
     async def test_execute_workflow_success(

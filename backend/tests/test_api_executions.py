@@ -10,9 +10,41 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from fastapi import status
 from httpx import AsyncClient
 from unittest.mock import MagicMock, AsyncMock, patch
+
+# =============================================================================
+# Module-Level Async Fixtures
+# =============================================================================
+
+
+@pytest_asyncio.fixture
+async def workflow_id(async_client: AsyncClient, sample_workflow_data) -> str:
+    """Create a workflow and return its ID."""
+    response = await async_client.post(
+        "/api/v1/workflows/", json=sample_workflow_data
+    )
+    return response.json()["id"]
+
+
+@pytest_asyncio.fixture
+async def execution_id(
+    async_client: AsyncClient, sample_workflow_data, sample_execution_data
+) -> str:
+    """Create an execution and return its ID."""
+    # Create workflow
+    workflow_response = await async_client.post(
+        "/api/v1/workflows/", json=sample_workflow_data
+    )
+    workflow_id = workflow_response.json()["id"]
+
+    # Create execution
+    execution_data = {**sample_execution_data, "workflow_id": workflow_id}
+    execution_response = await async_client.post("/api/v1/executions/", json=execution_data)
+    return execution_response.json()["id"]
+
 
 # =============================================================================
 # WorkflowExecution Endpoint Tests
@@ -21,14 +53,6 @@ from unittest.mock import MagicMock, AsyncMock, patch
 
 class TestWorkflowExecutionEndpoints:
     """Test suite for workflow execution API endpoints."""
-
-    @pytest.fixture
-    async def workflow_id(self, async_client: AsyncClient, sample_workflow_data):
-        """Create a workflow and return its ID."""
-        response = await async_client.post(
-            "/api/v1/workflows/", json=sample_workflow_data
-        )
-        return response.json()["id"]
 
     @pytest.mark.asyncio
     async def test_list_executions_empty(
@@ -397,24 +421,6 @@ class TestWorkflowExecutionEndpoints:
 class TestNodeExecutionEndpoints:
     """Test suite for node execution API endpoints."""
 
-    @pytest.fixture
-    async def execution_id(
-        self, async_client: AsyncClient, sample_workflow_data, sample_execution_data
-    ):
-        """Create an execution and return its ID."""
-        # Create workflow
-        workflow_response = await async_client.post(
-            "/api/v1/workflows/", json=sample_workflow_data
-        )
-        workflow_id = workflow_response.json()["id"]
-
-        # Create execution
-        execution_data = {**sample_execution_data, "workflow_id": workflow_id}
-        execution_response = await async_client.post(
-            "/api/v1/executions/", json=execution_data
-        )
-        return execution_response.json()["id"]
-
     @pytest.mark.asyncio
     async def test_list_node_executions_empty(
         self, async_client: AsyncClient, execution_id: str
@@ -560,24 +566,6 @@ class TestNodeExecutionEndpoints:
 
 class TestExecutionLogEndpoints:
     """Test suite for execution log API endpoints."""
-
-    @pytest.fixture
-    async def execution_id(
-        self, async_client: AsyncClient, sample_workflow_data, sample_execution_data
-    ):
-        """Create an execution and return its ID."""
-        # Create workflow
-        workflow_response = await async_client.post(
-            "/api/v1/workflows/", json=sample_workflow_data
-        )
-        workflow_id = workflow_response.json()["id"]
-
-        # Create execution
-        execution_data = {**sample_execution_data, "workflow_id": workflow_id}
-        execution_response = await async_client.post(
-            "/api/v1/executions/", json=execution_data
-        )
-        return execution_response.json()["id"]
 
     @pytest.mark.asyncio
     async def test_list_execution_logs_empty(
@@ -818,14 +806,6 @@ class TestExecutionLogEndpoints:
 class TestExecutionAPICoverage:
     """Additional tests to improve coverage for executions.py."""
 
-    @pytest.fixture
-    async def workflow_id(self, async_client: AsyncClient, sample_workflow_data):
-        """Create a workflow and return its ID."""
-        response = await async_client.post(
-            "/api/v1/workflows/", json=sample_workflow_data
-        )
-        return response.json()["id"]
-
     @pytest.mark.asyncio
     async def test_list_executions_invalid_pagination(
         self, async_client: AsyncClient, workflow_id: str
@@ -884,4 +864,109 @@ class TestExecutionAPICoverage:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["total"] >= 1
+
+
+# =============================================================================
+# Additional Error Path Coverage Tests for executions.py
+# =============================================================================
+
+
+class TestExecutionErrorPaths:
+    """Tests for error handling paths in executions.py."""
+
+    @pytest.mark.asyncio
+    async def test_list_executions_without_workflow_filter(self, async_client: AsyncClient):
+        """Test listing executions without workflow_id returns empty result.
+
+        Covers lines 173-181 in executions.py where workflow_id is None.
+        """
+        response = await async_client.get("/api/v1/executions/")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["items"] == []
+        assert data["total"] == 0
+
+    @pytest.mark.asyncio
+    async def test_get_execution_detail_not_found(self, async_client: AsyncClient):
+        """Test get execution detail returns 404 for non-existent execution.
+
+        Covers lines 307-311 in executions.py.
+        """
+        response = await async_client.get(f"/api/v1/executions/{uuid4()}/detail")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_cancel_execution_not_found(self, async_client: AsyncClient):
+        """Test cancel execution returns 404 for non-existent execution.
+
+        Covers lines 367-375 in executions.py.
+        """
+        response = await async_client.post(f"/api/v1/executions/{uuid4()}/cancel")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_get_execution_statistics_not_found(self, async_client: AsyncClient):
+        """Test get execution statistics returns 404 for non-existent execution.
+
+        Covers lines 407-411 in executions.py.
+        """
+        response = await async_client.get(f"/api/v1/executions/{uuid4()}/statistics")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_list_node_executions_execution_not_found(self, async_client: AsyncClient):
+        """Test list node executions returns 404 for non-existent execution.
+
+        Covers lines 448-453 in executions.py.
+        """
+        response = await async_client.get(f"/api/v1/executions/{uuid4()}/nodes")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_get_node_execution_not_found(self, async_client: AsyncClient):
+        """Test get node execution returns 404 for non-existent node execution.
+
+        Covers lines 500-505 and 508-512 in executions.py.
+        """
+        execution_id = uuid4()
+        node_execution_id = uuid4()
+        response = await async_client.get(
+            f"/api/v1/executions/{execution_id}/nodes/{node_execution_id}"
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_list_execution_logs_execution_not_found(
+        self, async_client: AsyncClient
+    ):
+        """Test list execution logs returns 404 for non-existent execution.
+
+        Covers lines 558-563 in executions.py.
+        """
+        response = await async_client.get(f"/api/v1/executions/{uuid4()}/logs")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_list_node_execution_logs_not_found(self, async_client: AsyncClient):
+        """Test list node execution logs returns 404 for non-existent node execution.
+
+        Covers lines 620-625 in executions.py.
+        """
+        execution_id = uuid4()
+        node_execution_id = uuid4()
+        response = await async_client.get(
+            f"/api/v1/executions/{execution_id}/nodes/{node_execution_id}/logs"
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_get_workflow_statistics_not_found(self, async_client: AsyncClient):
+        """Test get workflow statistics returns 404 for non-existent workflow.
+
+        Covers lines 746-750 in executions.py.
+        """
+        response = await async_client.get(
+            f"/api/v1/executions/workflows/{uuid4()}/statistics"
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
 
