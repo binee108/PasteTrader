@@ -2,7 +2,7 @@
 
 > **Version**: 0.1.0 (Alpha)
 > **Target**: Q1 2025
-> **Last Updated**: 2026-01-13
+> **Last Updated**: 2026-01-14
 
 ## Overview
 
@@ -27,7 +27,7 @@ PasteTrader는 AI 기반 트레이딩 워크플로우 자동화 플랫폼입니�
 | 5 | LLM Integration | L | Week 5 | 🔲 Pending |
 | 6 | Content Parsing | M | Week 8 | 🔲 Pending |
 | 7 | Frontend UI | XL | Week 6-7 | 🔲 Pending |
-| 8 | Scheduler Integration | M | Week 8 | 🔲 Pending |
+| 8 | Scheduler Integration | M | Week 8 | 🚧 In Progress |
 | 9 | Stock Screening | L | Week 9+ | 🔲 Pending |
 
 ---
@@ -299,9 +299,9 @@ class ContentParser(ABC):
 **Dependencies**: Phase 4, Phase 7
 
 **Deliverables**:
-- [ ] APScheduler async integration
+- [x] APScheduler async integration (SPEC-008)
 - [ ] Schedule CRUD service
-- [ ] Job persistence in PostgreSQL
+- [x] Job persistence in PostgreSQL (SPEC-006)
 - [ ] Schedule management UI
 - [ ] Next run time calculation
 
@@ -371,7 +371,7 @@ Phase 2 ────────────────┘      Phase 7 <──
 | SPEC-005 | 2 | Execution Tracking Models | P0 | ✅ |
 | SPEC-006 | 2 | Schedule Configuration Model | P1 | ✅ |
 | SPEC-007 | 3 | Workflow API Endpoints | P0 | |
-| SPEC-008 | 3 | Execution API Endpoints | P0 | |
+| SPEC-008 | 3/8 | Execution API Endpoints & APScheduler Integration | P0 | 🚧 |
 | SPEC-009 | 3 | Tool/Agent API Endpoints | P1 | |
 | SPEC-010 | 4 | DAG Validation Service | P0 | |
 | SPEC-011 | 4 | Workflow Execution Engine | P0 | |
@@ -454,7 +454,7 @@ schedules             - APScheduler 작업
 
 ## Next Steps
 
-### Current Status (2026-01-13)
+### Current Status (2026-01-14)
 
 **Completed**:
 - ✅ Phase 0: Database Foundation (SPEC-001, SPEC-002)
@@ -510,8 +510,13 @@ schedules             - APScheduler 작업
 1. **Phase 3: API Layer** (SPEC-007, SPEC-008, SPEC-009)
    - Workflow Schemas (SPEC-007)
    - Workflow CRUD API (SPEC-007)
-   - Execution API (SPEC-008)
+   - Execution API (SPEC-008) - Partially Complete (APScheduler integration done)
    - Tool/Agent API (SPEC-009)
+
+2. **Phase 8: Scheduler Integration** (Continued)
+   - Schedule CRUD service (Remaining)
+   - Schedule management UI
+   - Next run time calculation
 
 ### Commands for Next Session
 
