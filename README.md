@@ -258,6 +258,7 @@ npm run dev
 - [SPEC-006: Schedule Configuration Model](.moai/specs/SPEC-006/spec.md) - 구현 완료
 - [SPEC-007: Workflow API Endpoints](.moai/specs/SPEC-007/spec.md) - 구현 완료
 - [SPEC-009: Tool/Agent API Endpoints](.moai/specs/SPEC-009/spec.md) - 구현 완료
+- [SPEC-010: DAG Validation Service](.moai/specs/SPEC-010/spec.md) - 진행 중
 
 ## 테스트
 
@@ -289,8 +290,11 @@ open htmlcov/index.html
 - [x] Phase 0: 데이터베이스 기반 구축 (SPEC-001, SPEC-002)
 - [x] Phase 1: 워크플로우 코어 모델 (SPEC-003, SPEC-004, SPEC-007)
 - [x] Phase 2: 실행 추적 모델 (SPEC-005)
-- [ ] Phase 3: API 파운데이션
-- [ ] Phase 4: 프론트엔드 개발
+- [x] Phase 3: API 파운데이션 (SPEC-007, SPEC-008, SPEC-009)
+- [ ] Phase 4: 워크플로우 엔진 (SPEC-010 진행 중)
+- [ ] Phase 5: LLM 통합
+- [ ] Phase 6: 콘텐츠 파싱
+- [ ] Phase 7: 프론트엔드 개발
 
 ### 완료된 SPEC
 

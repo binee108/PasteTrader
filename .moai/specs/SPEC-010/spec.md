@@ -7,11 +7,11 @@
 | SPEC ID | SPEC-010 |
 | Title | DAG Validation Service for Workflow Engine |
 | Created | 2026-01-14 |
-| Status | Planned |
+| Status | In Progress |
 | Priority | High (P0) |
 | Lifecycle | spec-anchored |
 | Author | workflow-spec |
-| Phase | Phase 3 - Engine Core |
+| Phase | Phase 4 - Engine Core |
 
 ## Tags
 
@@ -1085,3 +1085,4 @@ class ValidationTimeoutError(DAGValidationError):
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0.0 | 2026-01-14 | workflow-spec | Initial SPEC creation |
+| 1.1.0 | 2026-01-14 | workflow-spec | Status changed to In Progress - starting TDD implementation |
