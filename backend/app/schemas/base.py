@@ -11,25 +11,19 @@ This module defines base schemas and common patterns used across the API.
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003 - Required at runtime for Pydantic
-from typing import TYPE_CHECKING, Any, TypeVar, cast
+from typing import Any, TypeVar
 from uuid import UUID  # noqa: TC003 - Required at runtime for Pydantic
 
 from pydantic import BaseModel, ConfigDict, Field
-
-if TYPE_CHECKING:
-    from pydantic.fields import FieldInfo
 
 # Generic type for paginated response items
 T = TypeVar("T")
 
 # Common field definitions for reuse
-ConfigField: FieldInfo = cast(
-    "FieldInfo",
-    Field(
-        default_factory=dict,
-        description="Configuration object (JSON)",
-        examples=[{"timeout": 300, "retry": True}],
-    ),
+ConfigField = Field(
+    default_factory=dict,
+    description="Configuration object (JSON)",
+    examples=[{"timeout": 300, "retry": True}],
 )
 
 
@@ -202,46 +196,34 @@ class MessageResponse(BaseSchema):
 
 
 # Common field definitions for reuse
-NameField: FieldInfo = cast(
-    "FieldInfo",
-    Field(
-        ...,
-        min_length=1,
-        max_length=255,
-        description="Display name",
-        examples=["My Workflow"],
-    ),
+NameField = Field(
+    ...,
+    min_length=1,
+    max_length=255,
+    description="Display name",
+    examples=["My Workflow"],
 )
 
-OptionalNameField: FieldInfo = cast(
-    "FieldInfo",
-    Field(
-        default=None,
-        min_length=1,
-        max_length=255,
-        description="Display name",
-        examples=["My Workflow"],
-    ),
+OptionalNameField = Field(
+    default=None,
+    min_length=1,
+    max_length=255,
+    description="Display name",
+    examples=["My Workflow"],
 )
 
-DescriptionField: FieldInfo = cast(
-    "FieldInfo",
-    Field(
-        default=None,
-        max_length=2000,
-        description="Optional description",
-        examples=["This workflow processes incoming data"],
-    ),
+DescriptionField = Field(
+    default=None,
+    max_length=2000,
+    description="Optional description",
+    examples=["This workflow processes incoming data"],
 )
 
-VersionField: FieldInfo = cast(
-    "FieldInfo",
-    Field(
-        ...,
-        ge=1,
-        description="Version number for optimistic locking",
-        examples=[1],
-    ),
+VersionField = Field(
+    ...,
+    ge=1,
+    description="Version number for optimistic locking",
+    examples=[1],
 )
 
 
