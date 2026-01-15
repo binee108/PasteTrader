@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID  # noqa: TC003 - Required at runtime for Pydantic v2
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.schemas.base import (
     BaseResponse,
@@ -77,6 +77,47 @@ class ToolBase(BaseSchema):
 
 class ToolCreate(ToolBase):
     """Schema for creating a new tool."""
+
+    @model_validator(mode="after")
+    def validate_tool_config(self) -> "ToolCreate":
+        """도구 타입별 필수 필드를 검증합니다.
+
+        각 도구 타입에 필요한 필드가 config에 포함되어 있는지 확인합니다.
+
+        Raises:
+            ValueError: 필수 필드가 누락된 경우
+
+        Returns:
+            검증된 ToolCreate 인스턴스
+        """
+        # 도구 타입별 필수 필드 매핑
+        required_fields_by_type: dict[str, list[str]] = {
+            "http": ["url"],
+            "python": ["code"],
+            "shell": ["command"],
+            "mcp": ["server_url"],
+        }
+
+        # 해당 타입의 필수 필드 목록 가져오기
+        required_fields = required_fields_by_type.get(self.tool_type, [])
+
+        # 누락된 필드 확인
+        missing_fields: list[str] = []
+        for field in required_fields:
+            if field not in self.config or self.config[field] is None:
+                missing_fields.append(field)
+
+        # 필수 필드가 누락된 경우 에러 발생
+        if missing_fields:
+            raise ValueError(
+                f"'{self.tool_type}' 타입의 도구 설정에 필수 필드가 누락되었습니다: "
+                f"{', '.join(f"'{field}'" for field in missing_fields)}"
+            )
+
+        return self
+
+
+
 
 
 # =============================================================================

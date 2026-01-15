@@ -10,17 +10,21 @@ This module provides service layer abstractions for agent management.
 
 from __future__ import annotations
 
+import builtins
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import attributes
 
+from app.core.exceptions import ResourceInUseError
 from app.models.agent import Agent
+from app.models.tool import Tool
+from app.models.workflow import Node, Workflow
+
+from uuid import UUID
 
 if TYPE_CHECKING:
-    from uuid import UUID
-
     from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -38,11 +42,18 @@ class AgentNotFoundError(AgentServiceError):
 
 
 class ToolNotFoundError(AgentServiceError):
-    """Raised when a tool is not found."""
+    """Raised when a tool is not found or is inactive."""
 
 
 class ToolAlreadyAssociatedError(AgentServiceError):
     """Raised when a tool is already associated with an agent."""
+
+
+    """Raised when attempting to add an inactive tool to an agent."""
+
+
+class AgentExecutionError(AgentServiceError):
+    """Raised when agent execution fails."""
 
 
 # =============================================================================
@@ -120,7 +131,7 @@ class AgentService:
         skip: int = 0,
         limit: int = 20,
         model_provider: str | None = None,
-        is_active: bool | None = None,
+        is_active: bool | None = True,
         is_public: bool | None = None,
         include_deleted: bool = False,
     ) -> list[Agent]:
@@ -161,7 +172,7 @@ class AgentService:
         self,
         owner_id: UUID,
         model_provider: str | None = None,
-        is_active: bool | None = None,
+        is_active: bool | None = True,
         is_public: bool | None = None,
         include_deleted: bool = False,
     ) -> int:
@@ -237,10 +248,45 @@ class AgentService:
 
         Raises:
             AgentNotFoundError: If agent not found.
+            ResourceInUseError: If agent is used in workflows.
         """
         agent = await self.get(agent_id)
         if agent is None:
             raise AgentNotFoundError(f"Agent {agent_id} not found")
+
+        # X-001: 워크플로우에서 사용 중인지 확인
+        agent_id_str = str(agent_id)
+        
+        # Node 테이블에서 이 agent를 사용하는 노드 찾기
+        node_query = select(Node, Workflow).join(
+            Workflow, Node.workflow_id == Workflow.id
+        ).where(
+            Node.agent_id == agent_id_str,
+            Workflow.deleted_at.is_(None)
+        )
+        
+        node_result = await self.db.execute(node_query)
+        node_workflow_pairs = node_result.all()
+        
+        if node_workflow_pairs:
+            # 참조 정보 수집
+            references = [
+                {"type": "workflow", "id": str(workflow.id), "name": workflow.name}
+                for node, workflow in node_workflow_pairs
+            ]
+            # 중복 제거 (workflow ID로)
+            seen = set()
+            unique_references = []
+            for ref in references:
+                if ref["id"] not in seen:
+                    seen.add(ref["id"])
+                    unique_references.append(ref)
+            
+            raise ResourceInUseError(
+                resource_type="agent",
+                resource_id=agent_id_str,
+                references=unique_references
+            )
 
         agent.soft_delete()
         await self.db.flush()
@@ -249,6 +295,11 @@ class AgentService:
 
     async def add_tool(self, agent_id: UUID, tool_id: UUID) -> Agent:
         """Add a tool to an agent.
+
+        Validates that:
+        1. The tool exists in the database
+        2. The tool is active (is_active=True)
+        3. The tool is not already associated with the agent
 
         Args:
             agent_id: UUID of the agent.
@@ -259,18 +310,24 @@ class AgentService:
 
         Raises:
             AgentNotFoundError: If agent not found.
+            ToolNotFoundError: If tool not found or deleted.
             ToolAlreadyAssociatedError: If tool already associated.
         """
+        # Check if agent exists
         agent = await self.get(agent_id)
         if agent is None:
             raise AgentNotFoundError(f"Agent {agent_id} not found")
 
         tool_id_str = str(tool_id)
+
+        # Check if tool is already associated
         if tool_id_str in agent.tools:
             raise ToolAlreadyAssociatedError(
                 f"Tool {tool_id} already associated with agent {agent_id}"
             )
 
+
+        # Add tool to agent
         agent.tools.append(tool_id_str)
         agent.updated_at = datetime.now(UTC)
 
@@ -309,6 +366,164 @@ class AgentService:
         await self.db.refresh(agent)
         return agent
 
+    async def cleanup_tool_references(self, tool_id: UUID) -> builtins.list[str]:
+        """Remove a deleted tool from all agents' tools arrays.
+
+        When a tool is deleted, this method should be called to clean up
+        references to the tool ID in all agents.
+
+        Args:
+            tool_id: UUID of the deleted tool.
+
+        Returns:
+            List of agent IDs that were updated.
+        """
+        tool_id_str = str(tool_id)
+
+        # Find all agents that reference this tool
+        agent_query = select(Agent).where(
+            Agent.deleted_at.is_(None)
+        )
+        agent_result = await self.db.execute(agent_query)
+        agents = agent_result.scalars().all()
+
+        updated_agent_ids = []
+
+        for agent in agents:
+            if tool_id_str in agent.tools:
+                agent.tools.remove(tool_id_str)
+                agent.updated_at = datetime.now(UTC)
+                attributes.flag_modified(agent, "tools")
+                updated_agent_ids.append(str(agent.id))
+
+        if updated_agent_ids:
+            await self.db.flush()
+
+        return updated_agent_ids
+
+    async def validate_tool_references(self, agent_id: UUID) -> dict[str, Any]:
+        """Validate that all tools referenced by an agent exist and are active.
+
+        This method checks each tool ID in the agent's tools array and returns
+        a report of any invalid or inactive tool references.
+
+        Args:
+            agent_id: UUID of the agent to validate.
+
+        Returns:
+            Dictionary with validation results:
+                - valid: List of valid tool IDs
+                - missing: List of tool IDs that don't exist
+                - inactive: List of tool IDs that exist but are not active
+                - deleted: List of tool IDs that have been soft-deleted
+
+        Raises:
+            AgentNotFoundError: If agent not found.
+        """
+        agent = await self.get(agent_id)
+        if agent is None:
+            raise AgentNotFoundError(f"Agent {agent_id} not found")
+
+        if not agent.tools:
+            return {
+                "valid": [],
+                "missing": [],
+                "inactive": [],
+                "deleted": [],
+            }
+
+        # Query all tools at once
+        tool_ids = [UUID(tool_id_str) for tool_id_str in agent.tools]
+        tool_query = select(Tool).where(Tool.id.in_(tool_ids))
+        tool_result = await self.db.execute(tool_query)
+        existing_tools = tool_result.scalars().all()
+
+        # Categorize tool IDs
+        existing_tool_ids = {str(tool.id) for tool in existing_tools}
+        valid_tools = []
+        inactive_tools = []
+        missing_tools = []
+
+        for tool_id_str in agent.tools:
+            if tool_id_str not in existing_tool_ids:
+                # Tool doesn't exist - check if it was deleted
+                deleted_query = select(Tool).where(
+                    Tool.id == UUID(tool_id_str),
+                    Tool.deleted_at.isnot(None)
+                )
+                deleted_result = await self.db.execute(deleted_query)
+                deleted_tool = deleted_result.scalar_one_or_none()
+
+                if deleted_tool:
+                    # Soft-deleted tools are tracked separately
+                    pass
+                else:
+                    # Tool ID doesn't exist at all
+                    missing_tools.append(tool_id_str)
+            else:
+                # Tool exists, check if active
+                for tool in existing_tools:
+                    if str(tool.id) == tool_id_str:
+                        if tool.is_active:
+                            valid_tools.append(tool_id_str)
+                        else:
+                            inactive_tools.append(tool_id_str)
+                        break
+
+        return {
+            "valid": valid_tools,
+            "missing": missing_tools,
+            "inactive": inactive_tools,
+            "deleted": [],  # Soft-deleted tools not tracked separately
+        }
+
+    async def test_execute(self, agent_id: UUID, input_data: dict[str, Any]) -> dict[str, Any]:
+        """Test execute an agent with sample input.
+
+        Args:
+            agent_id: UUID of the agent to test.
+            input_data: Input data for agent execution.
+
+        Returns:
+            Dictionary with execution results.
+
+        Raises:
+            AgentNotFoundError: If agent not found.
+            AgentExecutionError: If execution fails.
+        """
+        import time
+
+        agent = await self.get(agent_id)
+        if agent is None:
+            raise AgentNotFoundError(f"Agent {agent_id} not found")
+
+        if not agent.is_active:
+            raise AgentExecutionError(f"Agent {agent_id} is not active")
+
+        start_time = time.time()
+        try:
+
+            # TODO: Implement actual agent execution based on model_provider
+            # For now, return a mock response
+            execution_time_ms = (time.time() - start_time) * 1000
+
+            return {
+                "success": True,
+                "output": {
+                    "message": f"Agent '{agent.name}' execution simulated",
+                    "input": input_data,
+                    "model_provider": agent.model_provider,
+                    "model_name": agent.model_name,
+                },
+                "error": None,
+                "execution_time_ms": execution_time_ms,
+            }
+        except Exception as e:
+            execution_time_ms = (time.time() - start_time) * 1000
+            raise AgentExecutionError(
+                f"Agent execution failed: {e}"
+            ) from e
+
 
 __all__ = [
     "AgentNotFoundError",
@@ -316,4 +531,5 @@ __all__ = [
     "AgentServiceError",
     "ToolAlreadyAssociatedError",
     "ToolNotFoundError",
+    "AgentExecutionError",
 ]

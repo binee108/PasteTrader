@@ -24,11 +24,14 @@ from app.schemas.agent import (
     AgentCreate,
     AgentListResponse,
     AgentResponse,
+    AgentTestRequest,
+    AgentTestResponse,
     AgentToolAdd,
     AgentUpdate,
 )
 from app.schemas.base import PaginatedResponse
 from app.services.agent_service import (
+    AgentExecutionError,
     AgentNotFoundError,
     AgentService,
     AgentServiceError,
@@ -362,6 +365,52 @@ async def remove_tool_from_agent(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to remove tool from agent: {e!s}",
+        ) from e
+
+
+@router.post(
+    "/{agent_id}/test",
+    response_model=AgentTestResponse,
+    summary="Test agent execution",
+    description="Test execute an agent with sample input data.",
+)
+async def test_agent(
+    db: DBSession,
+    agent_id: UUID,
+    test_request: AgentTestRequest,
+) -> AgentTestResponse:
+    """Test execute an agent.
+
+    Args:
+        db: Database session.
+        agent_id: UUID of the agent.
+        test_request: Test input data.
+
+    Returns:
+        Agent test execution results.
+
+    Raises:
+        HTTPException: 404 if agent not found.
+        HTTPException: 400 if execution fails.
+    """
+    try:
+        agent_service = AgentService(db)
+        result = await agent_service.test_execute(agent_id, test_request.input_data)
+        return AgentTestResponse(**result)
+    except AgentNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except AgentExecutionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to test agent: {e!s}",
         ) from e
 
 

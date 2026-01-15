@@ -213,15 +213,21 @@ class TestToolEndpoints:
     @pytest.mark.asyncio
     async def test_list_tools_with_pagination(self, async_client: AsyncClient):
         """Test tool listing with pagination."""
-        # Create multiple tools
+        # Create multiple tools with valid config
         for i in range(5):
             await async_client.post(
                 "/api/v1/tools/",
                 json={
                     "name": f"Tool {i}",
                     "tool_type": "http",
-                    "config": {},
-                    "input_schema": {},
+                    "config": {
+                        "url": f"https://api.example.com/endpoint{i}",
+                        "method": "POST",
+                    },
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                    },
                 },
             )
 
@@ -336,8 +342,14 @@ class TestToolAPIExceptionHandling:
             tool_data = {
                 "name": "Test Tool",
                 "tool_type": "http",
-                "config": {},
-                "input_schema": {},
+                "config": {
+                    "url": "https://api.example.com/endpoint",
+                    "method": "POST",
+                },
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"query": {"type": "string"}},
+                },
             }
             response = await async_client.post("/api/v1/tools/", json=tool_data)
 

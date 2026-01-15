@@ -268,7 +268,7 @@ class TestToolServiceList:
         assert results[0].name == "Active Tool"
 
         # With include_deleted=True, should return both
-        results = await service.list(owner_id, include_deleted=True)
+        results = await service.list(owner_id, include_deleted=True, is_active=None)
         assert len(results) == 2
 
     @pytest.mark.asyncio
@@ -283,6 +283,33 @@ class TestToolServiceList:
         service = ToolService(db_session)
         results = await service.list(owner_id, skip=2, limit=2)
 
+        assert len(results) == 2
+
+    @pytest.mark.asyncio
+    async def test_list_tools_default_active_filter(
+        self, db_session, tool_factory
+    ):
+        """Test that list() returns only active tools by default."""
+        owner_id = uuid4()
+        active_tool = tool_factory(owner_id=owner_id, is_active=True)
+        inactive_tool = tool_factory(owner_id=owner_id, is_active=False)
+        db_session.add_all([active_tool, inactive_tool])
+        await db_session.flush()
+
+        service = ToolService(db_session)
+
+        # Default behavior should return only active tools
+        results = await service.list(owner_id)
+        assert len(results) == 1
+        assert results[0].is_active is True
+
+        # Explicitly request inactive tools
+        results = await service.list(owner_id, is_active=False)
+        assert len(results) == 1
+        assert results[0].is_active is False
+
+        # Request all tools (active and inactive)
+        results = await service.list(owner_id, is_active=None)
         assert len(results) == 2
 
 
@@ -343,7 +370,7 @@ class TestToolServiceCount:
         assert count == 1
 
         # With include_deleted
-        count = await service.count(owner_id, include_deleted=True)
+        count = await service.count(owner_id, include_deleted=True, is_active=None)
         assert count == 2
 
 

@@ -154,4 +154,38 @@ __all__ = [
     "AgentResponse",
     "AgentToolAdd",
     "AgentUpdate",
+    "AgentTestRequest",
+    "AgentTestResponse",
 ]
+
+
+class AgentTestRequest(BaseSchema):
+    """Schema for agent test execution request."""
+
+    input_data: dict[str, Any] = Field(
+        ...,
+        description="Input data to test the agent with",
+        examples=[{"message": "Hello, how can you help me?"}],
+    )
+
+
+class AgentTestResponse(BaseSchema):
+    """Schema for agent test execution response."""
+
+    success: bool = Field(
+        ...,
+        description="Whether the agent execution was successful",
+    )
+    output: dict[str, Any] | None = Field(
+        default=None,
+        description="Agent output data",
+    )
+    error: str | None = Field(
+        default=None,
+        description="Error message if execution failed",
+    )
+    execution_time_ms: float = Field(
+        ...,
+        description="Agent execution time in milliseconds",
+        examples=[250.5],
+    )

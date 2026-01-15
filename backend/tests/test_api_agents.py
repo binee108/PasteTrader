@@ -551,3 +551,78 @@ class TestAgentAPIExceptionHandling:
 
             assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
             assert "Tool removal failed" in response.json()["detail"]
+
+
+class TestAgentTestEndpoint:
+    """Test suite for agent test execution endpoint."""
+
+    @pytest.fixture
+    def sample_agent_data(self) -> dict:
+        """Sample agent creation data."""
+        return {
+            "name": "Test Agent",
+            "description": "A test AI agent",
+            "model_provider": "anthropic",
+            "model_name": "claude-3-5-sonnet-20241022",
+            "system_prompt": "You are a helpful assistant.",
+            "config": {"temperature": 0.7, "max_tokens": 2000},
+            "tools": [],
+            "memory_config": {"max_turns": 10},
+            "is_active": True,
+            "is_public": False,
+        }
+
+    @pytest.mark.asyncio
+    async def test_test_agent_success(
+        self, async_client: AsyncClient, sample_agent_data: dict
+    ):
+        """Test successful agent test execution."""
+        # Create agent
+        create_response = await async_client.post(
+            "/api/v1/agents/", json=sample_agent_data
+        )
+        agent_id = create_response.json()["id"]
+
+        # Test agent
+        test_request = {"input_data": {"message": "Hello, how can you help me?"}}
+        response = await async_client.post(
+            f"/api/v1/agents/{agent_id}/test", json=test_request
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["success"] is True
+        assert data["output"] is not None
+        assert "message" in data["output"]
+        assert data["error"] is None
+        assert data["execution_time_ms"] >= 0
+
+    @pytest.mark.asyncio
+    async def test_test_agent_not_found(self, async_client: AsyncClient):
+        """Test testing non-existent agent returns 404."""
+        test_request = {"input_data": {"message": "Hello"}}
+        response = await async_client.post(
+            f"/api/v1/agents/{uuid4()}/test", json=test_request
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_test_agent_inactive(
+        self, async_client: AsyncClient, sample_agent_data: dict
+    ):
+        """Test testing inactive agent returns 400."""
+        # Create agent
+        create_response = await async_client.post(
+            "/api/v1/agents/", json={**sample_agent_data, "is_active": False}
+        )
+        agent_id = create_response.json()["id"]
+
+        # Test agent
+        test_request = {"input_data": {"message": "Hello"}}
+        response = await async_client.post(
+            f"/api/v1/agents/{agent_id}/test", json=test_request
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "not active" in response.json()["detail"]

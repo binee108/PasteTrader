@@ -15,7 +15,10 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 
+from app.core.exceptions import InvalidToolConfigError, ResourceInUseError
+from app.models.agent import Agent
 from app.models.tool import Tool
+from app.models.workflow import Workflow, Node
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -51,9 +54,45 @@ class ToolService:
     TAG: [SPEC-009] [API] [SERVICE] [TOOL]
     """
 
+    # 도구 타입별 필수 필드 매핑
+    REQUIRED_FIELDS_BY_TYPE: dict[str, list[str]] = {
+        "http": ["url"],
+        "python": ["code"],
+        "shell": ["command"],
+        "mcp": ["server_url"],
+    }
+
     def __init__(self, db: AsyncSession) -> None:
         """Initialize tool service."""
         self.db = db
+
+    def _validate_tool_config(self, tool_type: str, config: dict[str, Any]) -> None:
+        """도구 설정의 유효성을 검증합니다.
+
+        Args:
+            tool_type: 도구 타입
+            config: 도구 설정 딕셔너리
+
+        Raises:
+            InvalidToolConfigError: 필수 필드가 누락된 경우
+        """
+        required_fields = self.REQUIRED_FIELDS_BY_TYPE.get(tool_type, [])
+
+        # builtin 타입은 config 검증이 필요 없음
+        if tool_type == "builtin":
+            return
+
+        # 누락된 필드 확인
+        missing_fields: list[str] = []
+        for field in required_fields:
+            if field not in config or config[field] is None:
+                missing_fields.append(field)
+
+        if missing_fields:
+            raise InvalidToolConfigError(
+                tool_type=tool_type,
+                missing_fields=missing_fields,
+            )
 
     async def create(self, owner_id: UUID, data: Any) -> Tool:
         """Create a new tool.
@@ -67,7 +106,11 @@ class ToolService:
 
         Raises:
             ToolServiceError: If creation fails.
+            InvalidToolConfigError: If required config fields are missing.
         """
+        # 서비스 수준에서도 config 유효성 검증 수행 (이중 체크)
+        self._validate_tool_config(data.tool_type, data.config)
+
         try:
             tool = Tool(
                 owner_id=owner_id,
@@ -86,6 +129,9 @@ class ToolService:
             await self.db.flush()
             await self.db.refresh(tool)
             return tool
+        except InvalidToolConfigError:
+            # InvalidToolConfigError는 그대로 전파
+            raise
         except Exception as e:
             raise ToolServiceError(f"Failed to create tool: {e}") from e
 
@@ -115,7 +161,7 @@ class ToolService:
         skip: int = 0,
         limit: int = 20,
         tool_type: str | None = None,
-        is_active: bool | None = None,
+        is_active: bool | None = True,
         is_public: bool | None = None,
         include_deleted: bool = False,
     ) -> list[Tool]:
@@ -156,7 +202,7 @@ class ToolService:
         self,
         owner_id: UUID,
         tool_type: str | None = None,
-        is_active: bool | None = None,
+        is_active: bool | None = True,
         is_public: bool | None = None,
         include_deleted: bool = False,
     ) -> int:
@@ -232,10 +278,53 @@ class ToolService:
 
         Raises:
             ToolNotFoundError: If tool not found.
+            ResourceInUseError: If tool is used in agents or workflows.
         """
         tool = await self.get(tool_id)
         if tool is None:
             raise ToolNotFoundError(f"Tool {tool_id} not found")
+
+        # X-002: 에이전트 및 워크플로우에서 사용 중인지 확인
+        tool_id_str = str(tool_id)
+        references = []
+        
+        # 1. Agent 테이블의 tools 배열에서 확인
+        agent_query = select(Agent).where(Agent.deleted_at.is_(None))
+        agent_result = await self.db.execute(agent_query)
+        agents = agent_result.scalars().all()
+        
+        for agent in agents:
+            if tool_id_str in agent.tools:
+                references.append({
+                    "type": "agent",
+                    "id": str(agent.id),
+                    "name": agent.name
+                })
+        
+        # 2. Node 테이블에서 확인 (tool_type 노드)
+        node_query = select(Node, Workflow).join(
+            Workflow, Node.workflow_id == Workflow.id
+        ).where(
+            Node.tool_id == tool_id_str,
+            Workflow.deleted_at.is_(None)
+        )
+        
+        node_result = await self.db.execute(node_query)
+        node_workflow_pairs = node_result.all()
+        
+        for node, workflow in node_workflow_pairs:
+            references.append({
+                "type": "workflow",
+                "id": str(workflow.id),
+                "name": workflow.name
+            })
+        
+        if references:
+            raise ResourceInUseError(
+                resource_type="tool",
+                resource_id=tool_id_str,
+                references=references
+            )
 
         tool.soft_delete()
         await self.db.flush()

@@ -16,6 +16,7 @@ from app.models.agent import Agent
 from app.models.enums import ModelProvider
 from app.schemas.agent import AgentCreate, AgentUpdate
 from app.services.agent_service import (
+    AgentExecutionError,
     AgentNotFoundError,
     AgentService,
     AgentServiceError,
@@ -274,7 +275,7 @@ class TestAgentServiceList:
         assert results[0].name == "Active Agent"
 
         # With include_deleted=True, should return both
-        results = await service.list(owner_id, include_deleted=True)
+        results = await service.list(owner_id, include_deleted=True, is_active=None)
         assert len(results) == 2
 
     @pytest.mark.asyncio
@@ -353,7 +354,7 @@ class TestAgentServiceCount:
         assert count == 1
 
         # With include_deleted
-        count = await service.count(owner_id, include_deleted=True)
+        count = await service.count(owner_id, include_deleted=True, is_active=None)
         assert count == 2
 
 
@@ -584,3 +585,90 @@ class TestAgentServiceRemoveTool:
         # Verify the tool was removed and field was flagged
         assert str(tool_id) not in updated.tools
         assert updated.updated_at is not None
+
+from app.models.tool import Tool
+
+
+class TestAgentServiceTestExecute:
+    """Test AgentService.test_execute() method."""
+
+    @pytest.mark.asyncio
+    async def test_agent_execute_success(self, db_session, agent_factory):
+        """Test successful agent execution."""
+        agent = agent_factory(is_active=True)
+        db_session.add(agent)
+        await db_session.flush()
+
+        service = AgentService(db_session)
+        input_data = {"task": "test task"}
+
+        result = await service.test_execute(agent.id, input_data)
+
+        assert result["success"] is True
+        assert "execution_time_ms" in result
+        assert result["output"]["input"] == input_data
+
+    @pytest.mark.asyncio
+    async def test_agent_execute_not_found(self, db_session):
+        """Test agent execution with non-existent agent."""
+        service = AgentService(db_session)
+
+        with pytest.raises(AgentNotFoundError):
+            await service.test_execute(uuid4(), {})
+
+    @pytest.mark.asyncio
+    async def test_agent_execute_inactive_agent(self, db_session, agent_factory):
+        """Test agent execution on inactive agent raises error."""
+        agent = agent_factory(is_active=False)
+        db_session.add(agent)
+        await db_session.flush()
+
+        service = AgentService(db_session)
+
+        with pytest.raises(AgentExecutionError, match="not active"):
+            await service.test_execute(agent.id, {})
+
+    @pytest.mark.asyncio
+    async def test_agent_execute_returns_execution_time(self, db_session, agent_factory):
+        """Test that agent execution returns execution time."""
+        agent = agent_factory(is_active=True)
+        db_session.add(agent)
+        await db_session.flush()
+
+        service = AgentService(db_session)
+        result = await service.test_execute(agent.id, {})
+
+        assert "execution_time_ms" in result
+        assert isinstance(result["execution_time_ms"], float)
+        assert result["execution_time_ms"] >= 0
+
+
+class TestAgentServiceListDefaultActiveFilter:
+    """Test AgentService.list() default is_active=True behavior."""
+
+    @pytest.mark.asyncio
+    async def test_list_returns_only_active_by_default(
+        self, db_session, agent_factory
+    ):
+        """Test that list() returns only active agents by default."""
+        owner_id = uuid4()
+        active_agent = agent_factory(owner_id=owner_id, is_active=True)
+        inactive_agent = agent_factory(owner_id=owner_id, is_active=False)
+        db_session.add_all([active_agent, inactive_agent])
+        await db_session.flush()
+
+        service = AgentService(db_session)
+
+        # Default behavior should return only active agents
+        results = await service.list(owner_id)
+        assert len(results) == 1
+        assert results[0].is_active is True
+
+        # Explicitly request inactive agents
+        results = await service.list(owner_id, is_active=False)
+        assert len(results) == 1
+        assert results[0].is_active is False
+
+        # Request all agents (active and inactive)
+        results = await service.list(owner_id, is_active=None)
+        assert len(results) == 2
