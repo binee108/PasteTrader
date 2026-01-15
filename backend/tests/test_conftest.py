@@ -94,14 +94,18 @@ class TestAsyncEngine:
         async with engine_instance.connect() as conn:
             # Check that Workflow table exists
             result = await conn.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table' AND name='workflows'")
+                text(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='workflows'"
+                )
             )
             workflow_table = result.fetchone()
             assert workflow_table is not None
 
             # Check that nodes table exists
             result = await conn.execute(
-                text("SELECT name FROM sqlite_master WHERE type='table' AND name='nodes'")
+                text(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='nodes'"
+                )
             )
             node_table = result.fetchone()
             assert node_table is not None
@@ -241,7 +245,9 @@ class TestDbSession:
         await db_session.commit()
 
         # Data should be visible during test
-        result = await db_session.execute(select(Workflow).where(Workflow.name == "Should be rolled back"))
+        result = await db_session.execute(
+            select(Workflow).where(Workflow.name == "Should be rolled back")
+        )
         assert result.scalar_one_or_none() is not None
 
         # After test completes, rollback should happen (verified by next test)
@@ -409,7 +415,10 @@ class TestSampleWorkflow:
         assert sample_workflow.is_active is True
         assert sample_workflow.version == 1
         assert sample_workflow.config == {"timeout": 300, "max_retries": 3}
-        assert sample_workflow.variables == {"api_key": "test_key", "environment": "test"}
+        assert sample_workflow.variables == {
+            "api_key": "test_key",
+            "environment": "test",
+        }
 
     def test_sample_workflow_owner_matches_sample_user_id(
         self, sample_workflow, sample_user_id
@@ -628,7 +637,9 @@ class TestSampleCompletedExecution:
         assert sample_completed_execution.output_data is not None
         assert "result" in sample_completed_execution.output_data
 
-    def test_sample_completed_execution_has_event_trigger(self, sample_completed_execution):
+    def test_sample_completed_execution_has_event_trigger(
+        self, sample_completed_execution
+    ):
         """Test that sample_completed_execution has EVENT trigger type."""
         assert sample_completed_execution.trigger_type == TriggerType.EVENT
 
@@ -650,7 +661,9 @@ class TestSampleFailedExecution:
         assert sample_failed_execution.error_message is not None
         assert "Test error" in sample_failed_execution.error_message
 
-    def test_sample_failed_execution_has_schedule_trigger(self, sample_failed_execution):
+    def test_sample_failed_execution_has_schedule_trigger(
+        self, sample_failed_execution
+    ):
         """Test that sample_failed_execution has SCHEDULE trigger type."""
         assert sample_failed_execution.trigger_type == TriggerType.SCHEDULE
 
@@ -893,7 +906,9 @@ class TestExecutionFactory:
 class TestNodeExecutionFactory:
     """Tests for node_execution_factory fixture."""
 
-    def test_node_execution_factory_creates_node_execution(self, node_execution_factory):
+    def test_node_execution_factory_creates_node_execution(
+        self, node_execution_factory
+    ):
         """Test that node_execution_factory creates NodeExecution instances."""
         node_exec = node_execution_factory()
         assert isinstance(node_exec, NodeExecution)

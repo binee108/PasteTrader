@@ -383,9 +383,7 @@ class TestToolServiceList:
         tool1 = await service.create(
             sample_owner_id, tool_create_factory(name="Tool 1")
         )
-        await service.create(
-            sample_owner_id, tool_create_factory(name="Tool 2")
-        )
+        await service.create(sample_owner_id, tool_create_factory(name="Tool 2"))
 
         # Delete one tool
         await service.delete(tool1.id)
@@ -567,9 +565,7 @@ class TestToolServiceCount:
         tool1 = await service.create(
             sample_owner_id, tool_create_factory(name="Tool 1")
         )
-        await service.create(
-            sample_owner_id, tool_create_factory(name="Tool 2")
-        )
+        await service.create(sample_owner_id, tool_create_factory(name="Tool 2"))
 
         # Delete one tool
         await service.delete(tool1.id)
