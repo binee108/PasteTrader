@@ -10,12 +10,13 @@ Exports all schemas for convenient importing.
 # Base schemas and utilities
 # Agent schemas
 from app.schemas.agent import (
-    AgentBase,
     AgentCreate,
-    AgentListResponse,
     AgentResponse,
-    AgentToolAdd,
+    AgentTestRequest,
+    AgentTestResponse,
+    AgentToolsUpdate,
     AgentUpdate,
+    ModelConfig,
 )
 from app.schemas.base import (
     BaseResponse,
@@ -62,9 +63,8 @@ from app.schemas.execution import (
 
 # Tool schemas
 from app.schemas.tool import (
-    ToolBase,
     ToolCreate,
-    ToolListResponse,
+    ToolDetailResponse,
     ToolResponse,
     ToolTestRequest,
     ToolTestResponse,
@@ -99,11 +99,11 @@ from app.schemas.workflow import (
 
 __all__ = [
     # Agent schemas
-    "AgentBase",
     "AgentCreate",
-    "AgentListResponse",
     "AgentResponse",
-    "AgentToolAdd",
+    "AgentTestRequest",
+    "AgentTestResponse",
+    "AgentToolsUpdate",
     "AgentUpdate",
     # Base schemas
     "BaseResponse",
@@ -129,6 +129,7 @@ __all__ = [
     "ExecutionRetry",
     "ExecutionStatistics",
     "MessageResponse",
+    "ModelConfig",
     "NameField",
     "NodeBase",
     "NodeBatchCreate",
@@ -148,9 +149,8 @@ __all__ = [
     "RetryConfig",
     "SuccessResponse",
     # Tool schemas
-    "ToolBase",
     "ToolCreate",
-    "ToolListResponse",
+    "ToolDetailResponse",
     "ToolResponse",
     "ToolTestRequest",
     "ToolTestResponse",
