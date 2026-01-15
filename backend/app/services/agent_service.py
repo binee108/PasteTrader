@@ -94,9 +94,7 @@ class AgentService:
         except Exception as e:
             raise AgentServiceError(f"Failed to create agent: {e}") from e
 
-    async def get(
-        self, agent_id: UUID, include_deleted: bool = False
-    ) -> Agent | None:
+    async def get(self, agent_id: UUID, include_deleted: bool = False) -> Agent | None:
         """Get an agent by ID.
 
         Args:

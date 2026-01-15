@@ -1947,9 +1947,7 @@ class TestWorkflowExecuteEndpoint:
         assert data["input_data"] == input_data
 
     @pytest.mark.asyncio
-    async def test_execute_workflow_not_found(
-        self, async_client: AsyncClient
-    ):
+    async def test_execute_workflow_not_found(self, async_client: AsyncClient):
         """Test executing non-existent workflow returns 404.
 
         Tests that the endpoint returns 404 when workflow_id

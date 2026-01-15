@@ -89,9 +89,7 @@ class ToolService:
         except Exception as e:
             raise ToolServiceError(f"Failed to create tool: {e}") from e
 
-    async def get(
-        self, tool_id: UUID, include_deleted: bool = False
-    ) -> Tool | None:
+    async def get(self, tool_id: UUID, include_deleted: bool = False) -> Tool | None:
         """Get a tool by ID.
 
         Args:
@@ -242,7 +240,9 @@ class ToolService:
         await self.db.refresh(tool)
         return tool
 
-    async def test_execute(self, tool_id: UUID, input_data: dict[str, Any]) -> dict[str, Any]:
+    async def test_execute(
+        self, tool_id: UUID, input_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Test execute a tool with sample input.
 
         Args:
@@ -280,9 +280,7 @@ class ToolService:
             }
         except Exception as e:
             execution_time_ms = (time.time() - start_time) * 1000
-            raise ToolExecutionError(
-                f"Tool execution failed: {e}"
-            ) from e
+            raise ToolExecutionError(f"Tool execution failed: {e}") from e
 
 
 __all__ = [

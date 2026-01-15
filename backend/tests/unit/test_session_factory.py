@@ -241,6 +241,7 @@ class TestSessionFactoryConfigurationValidation:
         assert hasattr(async_session, "class_")
         assert "expire_on_commit" in async_session.kw
         assert "autoflush" in async_session.kw
+
     def test_session_factory_parameter_values(self):
         """Test session factory parameter values are correct."""
         from sqlalchemy.ext.asyncio import AsyncSession
@@ -255,6 +256,7 @@ class TestSessionFactoryConfigurationValidation:
 
         # class_ should be AsyncSession
         assert async_session.class_ is AsyncSession
+
     @pytest.mark.asyncio
     async def test_session_factory_engine_reference(self):
         """Test session factory engine reference is correct."""
