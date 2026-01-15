@@ -147,12 +147,27 @@ class AgentToolAdd(BaseSchema):
     )
 
 
+class AgentToolsUpdate(BaseSchema):
+    """Schema for updating agent tool connections.
+
+    Replaces the agent's tool list with the provided tool_ids.
+    Empty list removes all tools.
+    """
+
+    tool_ids: list[UUID] = Field(
+        ...,
+        description="List of tool UUIDs to connect to agent",
+        examples=[["550e8400-e29b-41d4-a716-446655440001"]],
+    )
+
+
 __all__ = [
     "AgentBase",
     "AgentCreate",
     "AgentListResponse",
     "AgentResponse",
     "AgentToolAdd",
+    "AgentToolsUpdate",
     "AgentUpdate",
     "AgentTestRequest",
     "AgentTestResponse",

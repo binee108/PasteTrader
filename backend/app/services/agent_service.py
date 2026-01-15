@@ -85,17 +85,23 @@ class AgentService:
             AgentServiceError: If creation fails.
         """
         try:
+            # Build model_config from schema fields
+            model_config = {
+                "provider": data.model_provider,
+                "model": data.model_name,
+            }
+            # Add any additional config from the schema
+            if data.config:
+                model_config.update(data.config)
+            if data.memory_config:
+                model_config["memory"] = data.memory_config
+
             agent = Agent(
                 owner_id=owner_id,
                 name=data.name,
                 description=data.description,
-                model_provider=data.model_provider,
-                model_name=data.model_name,
-                system_prompt=data.system_prompt,
-                config=data.config,
-                tools=data.tools or [],
-                memory_config=data.memory_config,
-                is_active=data.is_active,
+                system_prompt=data.system_prompt or "",
+                model_config=model_config,
                 is_public=data.is_public,
             )
             self.db.add(agent)
