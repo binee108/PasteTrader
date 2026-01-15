@@ -8,6 +8,7 @@ workflow graph validation including cycle detection, connectivity analysis,
 topology validation, and data flow verification.
 """
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -29,6 +30,10 @@ from app.schemas.validation import (
     ValidationWarning,
 )
 from app.services.workflow.algorithms import GraphAlgorithms
+from app.services.workflow.cache import (
+    _deserialize_validation_result,
+    get_validation_cache,
+)
 from app.services.workflow.exceptions import (
     CycleDetectedError,
     InvalidNodeReferenceError,
@@ -70,8 +75,12 @@ class DAGValidator:
         """Validate entire workflow graph.
 
         TAG: [SPEC-010] [DAG] [VALIDATION]
+        REQ: REQ-010-017 - Timeout Protection
+        REQ: REQ-010-018 - Validation Caching
 
         Performs all validation checks and returns comprehensive result.
+        Uses asyncio.wait_for to enforce timeout limits.
+        Implements caching to avoid redundant validations.
 
         Args:
             workflow_id: ID of the workflow to validate.
@@ -82,10 +91,78 @@ class DAGValidator:
 
         Raises:
             InvalidNodeReferenceError: If workflow doesn't exist.
+            asyncio.TimeoutError: If validation exceeds timeout.
         """
         if options is None:
             options = ValidationOptions()
 
+        # Get cache instance
+        cache = get_validation_cache()
+
+        # Fetch workflow first to get version for cache key
+        workflow = await self._get_workflow(workflow_id)
+        if workflow is None:
+            raise InvalidNodeReferenceError([workflow_id])
+
+        # Try to get from cache
+        if cache.available:
+            cached_result = await cache.get(workflow_id, workflow.version)
+            if cached_result is not None:
+                # Deserialize and reconstruct ValidationResult
+                result = ValidationResult(**cached_result)
+                # Mark as cached
+                return result.model_copy(update={"cached": True})
+
+        # Cache miss - perform validation
+        try:
+            # Wrap validation with timeout protection (REQ-010-017)
+            result = await asyncio.wait_for(
+                self._validate_workflow_impl(workflow_id, options),
+                timeout=options.timeout_seconds,
+            )
+
+            # Store in cache (only if validation succeeded)
+            if cache.available and result.is_valid:
+                await cache.set(
+                    workflow_id,
+                    result.workflow_version,
+                    result.model_dump(),
+                )
+
+            return result
+        except asyncio.TimeoutError:
+            # Return timeout error instead of raising
+            timeout_result = ValidationResult(
+                is_valid=False,
+                workflow_id=workflow_id,
+                workflow_version=workflow.version,
+                validated_at=datetime.now(UTC),
+                errors=[
+                    ValidationErrorDTO(
+                        code=ValidationErrorCode.VALIDATION_TIMEOUT,
+                        message=f"Validation exceeded timeout of {options.timeout_seconds}s",
+                        details={"timeout_seconds": options.timeout_seconds},
+                    )
+                ],
+                warnings=[],
+                validation_duration_ms=options.timeout_seconds * 1000,
+                validation_level=options.level,
+                cached=False,
+            )
+            # Don't cache timeout errors
+            return timeout_result
+
+    async def _validate_workflow_impl(
+        self,
+        workflow_id: UUID,
+        options: ValidationOptions,
+    ) -> ValidationResult:
+        """Internal implementation of workflow validation.
+
+        TAG: [SPEC-010] [DAG] [VALIDATION]
+
+        Separated from validate_workflow to allow timeout wrapping.
+        """
         start_time = datetime.now(UTC)
         errors: list[ValidationErrorDTO] = []
         warnings: list[ValidationWarning] = []
@@ -170,6 +247,10 @@ class DAGValidator:
         workflow = await self._get_workflow(workflow_id)
         workflow_version = workflow.version if workflow else 1
 
+        # Fetch current graph for node positions
+        nodes, edges = await self._get_workflow_graph_data(workflow_id)
+        node_positions = self._build_node_positions_map(nodes)
+
         # Check self-loop
         if source_node_id == target_node_id:
             errors.append(
@@ -177,7 +258,12 @@ class DAGValidator:
                     code=ValidationErrorCode.SELF_LOOP_DETECTED,
                     message="Self-loops are not allowed",
                     node_ids=[source_node_id],
-                    details={"node_id": str(source_node_id)},
+                    details={
+                        "node_id": str(source_node_id),
+                        "node_positions": {
+                            str(source_node_id): node_positions[str(source_node_id)]
+                        },
+                    },
                 )
             )
             return ValidationResult(
@@ -189,8 +275,7 @@ class DAGValidator:
                 warnings=warnings,
             )
 
-        # Fetch current graph
-        nodes, edges = await self._get_workflow_graph_data(workflow_id)
+        # Build graph
         graph = self._build_graph(nodes, edges)
 
         # Check if nodes exist
@@ -226,12 +311,19 @@ class DAGValidator:
 
         if cycle_path:
             cycle_str = " -> ".join(str(n)[:8] for n in cycle_path)
+            # Get positions for nodes in cycle
+            cycle_positions = {
+                str(node_id): node_positions[str(node_id)] for node_id in cycle_path
+            }
             errors.append(
                 ValidationErrorDTO(
                     code=ValidationErrorCode.CYCLE_DETECTED,
                     message=f"Adding this edge would create a cycle: {cycle_str}",
                     node_ids=cycle_path,
-                    details={"cycle_path": [str(n) for n in cycle_path]},
+                    details={
+                        "cycle_path": [str(n) for n in cycle_path],
+                        "node_positions": cycle_positions,
+                    },
                 )
             )
 
@@ -503,6 +595,22 @@ class DAGValidator:
                 )
             )
 
+    def _build_node_positions_map(
+        self, nodes: list[Node]
+    ) -> dict[str, dict[str, float]]:
+        """Build a map of node UUID to position coordinates.
+
+        Args:
+            nodes: List of Node objects.
+
+        Returns:
+            Dictionary mapping node UUID string to {"x": float, "y": float}.
+        """
+        return {
+            str(node.id): {"x": float(node.position_x), "y": float(node.position_y)}
+            for node in nodes
+        }
+
     def _validate_structural(
         self,
         graph: _Graph,
@@ -511,16 +619,26 @@ class DAGValidator:
         errors: list[ValidationErrorDTO],
     ) -> None:
         """Validate structural integrity (cycles, duplicates)."""
+        # Build node positions map
+        node_positions = self._build_node_positions_map(nodes)
+
         # Check for cycles
         cycle = GraphAlgorithms.detect_cycle(graph)
         if cycle:
             cycle_str = " -> ".join(str(n)[:8] for n in cycle)
+            # Get positions for nodes in cycle
+            cycle_positions = {
+                str(node_id): node_positions[str(node_id)] for node_id in cycle
+            }
             errors.append(
                 ValidationErrorDTO(
                     code=ValidationErrorCode.CYCLE_DETECTED,
                     message=f"Cycle detected: {cycle_str}",
                     node_ids=cycle,
-                    details={"cycle_path": [str(n) for n in cycle]},
+                    details={
+                        "cycle_path": [str(n) for n in cycle],
+                        "node_positions": cycle_positions,
+                    },
                 )
             )
 
@@ -625,6 +743,8 @@ class DAGValidator:
                             message="Node has no outgoing edges",
                             node_id=node_id,
                             suggestion="Add outgoing edge or mark as terminal",
+                            position_x=node.position_x,
+                            position_y=node.position_y,
                         )
                     )
 
@@ -634,6 +754,9 @@ class DAGValidator:
         errors: list[ValidationErrorDTO],
     ) -> None:
         """Validate node type requirements."""
+        # Build node positions map
+        node_positions = self._build_node_positions_map(nodes)
+
         for node in nodes:
             node_errors = []
 
@@ -655,6 +778,9 @@ class DAGValidator:
                             "node_id": str(node.id),
                             "node_type": node.node_type.value,
                             "missing_fields": node_errors,
+                            "node_positions": {
+                                str(node.id): node_positions[str(node.id)]
+                            },
                         },
                     )
                 )
@@ -667,6 +793,9 @@ class DAGValidator:
         errors: list[ValidationErrorDTO],
     ) -> None:
         """Validate data flow (schema compatibility, variable binding)."""
+        # Build node positions map
+        node_positions = self._build_node_positions_map(nodes)
+
         # Build variable set
         var_set = self._extract_variables(variables)
 
@@ -682,6 +811,9 @@ class DAGValidator:
                         details={
                             "node_id": str(node.id),
                             "undefined_variables": undefined,
+                            "node_positions": {
+                                str(node.id): node_positions[str(node.id)]
+                            },
                         },
                     )
                 )
@@ -708,6 +840,10 @@ class DAGValidator:
                                     "target_node_id": str(target.id),
                                     "source_output_schema": source.output_schema,
                                     "target_input_schema": target.input_schema,
+                                    "node_positions": {
+                                        str(source.id): node_positions[str(source.id)],
+                                        str(target.id): node_positions[str(target.id)],
+                                    },
                                 },
                             )
                         )

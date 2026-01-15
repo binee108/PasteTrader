@@ -22,18 +22,12 @@ from app.api.deps import (  # noqa: TC001 - Needed at runtime for FastAPI DI
 )
 from app.schemas.agent import (
     AgentCreate,
-    AgentListResponse,
     AgentResponse,
-    AgentToolAdd,
+    AgentToolsUpdate,
     AgentUpdate,
 )
 from app.schemas.base import PaginatedResponse
-from app.services.agent_service import (
-    AgentNotFoundError,
-    AgentService,
-    AgentServiceError,
-    ToolAlreadyAssociatedError,
-)
+from app.services.agent_service import AgentService
 
 router = APIRouter()
 
@@ -48,7 +42,7 @@ TEMP_OWNER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 @router.get(
     "/",
-    response_model=PaginatedResponse[AgentListResponse],
+    response_model=PaginatedResponse[AgentResponse],
     summary="List agents",
     description="Retrieve a paginated list of agents with optional filtering.",
 )
@@ -67,7 +61,7 @@ async def list_agents(
         bool | None,
         Query(description="Filter by public status"),
     ] = None,
-) -> PaginatedResponse[AgentListResponse]:
+) -> PaginatedResponse[AgentResponse]:
     """List agents with pagination and optional filtering.
 
     Args:
@@ -99,7 +93,7 @@ async def list_agents(
 
         # Convert models to response schemas
         agent_responses = [
-            AgentListResponse(
+            AgentResponse(
                 id=agent.id,
                 name=agent.name,
                 model_provider=agent.model_provider,

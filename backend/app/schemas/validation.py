@@ -188,8 +188,10 @@ class ValidationWarning(BaseSchema):
     """Single validation warning (non-blocking).
 
     TAG: [SPEC-010] [SCHEMAS] [VALIDATION]
+    REQ: REQ-010-019 - Visualization Hints
 
     Represents a warning that doesn't prevent execution but may indicate issues.
+    Includes position information for UI visualization.
     """
 
     code: str = Field(
@@ -207,6 +209,14 @@ class ValidationWarning(BaseSchema):
     suggestion: str | None = Field(
         default=None,
         description="Suggested fix or action",
+    )
+    position_x: float | None = Field(
+        default=None,
+        description="Node X coordinate for visualization",
+    )
+    position_y: float | None = Field(
+        default=None,
+        description="Node Y coordinate for visualization",
     )
 
 
