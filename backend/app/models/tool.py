@@ -23,6 +23,7 @@ from app.models.base import GUID, Base, SoftDeleteMixin, TimestampMixin, UUIDMix
 from app.models.enums import ToolType
 
 if TYPE_CHECKING:
+    from app.models.agent import Agent
     from app.models.user import User
 
 # Use JSONB for PostgreSQL, JSON for other databases (like SQLite for testing)
@@ -121,6 +122,12 @@ class Tool(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     # Relationships
     owner: Mapped[User] = relationship(
         "User",
+        back_populates="tools",
+    )
+
+    agents: Mapped[list[Agent]] = relationship(
+        "app.models.agent.Agent",
+        secondary="agent_tools",
         back_populates="tools",
     )
 

@@ -1,184 +1,211 @@
-"""Tool schemas for API request/response validation.
+"""Tool Pydantic schemas for API operations.
 
-TAG: [SPEC-009] [SCHEMAS] [TOOL]
-REQ: REQ-001 - Tool CRUD Schemas
-REQ: REQ-002 - Tool Type Enum Schemas
-REQ: REQ-003 - Tool Test Execution Schema
+TAG: [SPEC-009] [TOOL] [SCHEMAS]
+REQ: REQ-T001 - Tool CRUD Operations
+REQ: REQ-T002 - JSON Schema Validation for Parameters
+REQ: REQ-T003 - Tool Test Execution
 
-This module defines Pydantic schemas for Tool API validation.
+This module provides Pydantic schemas for Tool-related operations
+including creation, updates, responses, and test execution.
 """
 
-from __future__ import annotations
-
+from datetime import datetime
 from typing import Any
-from uuid import UUID  # noqa: TC003 - Required at runtime for Pydantic v2
+from uuid import UUID
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
-from app.schemas.base import (
-    BaseResponse,
-    BaseSchema,
-    DescriptionField,
-    NameField,
-    OptionalNameField,
-)
-
-# =============================================================================
-# Base Schemas
-# =============================================================================
+from app.schemas.base import BaseResponse, BaseSchema
 
 
-class ToolBase(BaseSchema):
-    """Base tool schema with common fields."""
+class ToolCreate(BaseSchema):
+    """Schema for tool creation.
 
-    name: str = NameField
-    description: str | None = DescriptionField
-    tool_type: str = Field(
+    Attributes:
+        name: Tool unique identifier name
+        description: Optional tool description
+        parameters: JSON Schema for tool parameters validation
+        implementation_path: Optional path to tool implementation file
+    """
+
+    name: str = Field(
         ...,
-        description="Type of tool (http, mcp, python, shell, builtin)",
-        examples=["http"],
+        min_length=1,
+        max_length=255,
+        description="Tool unique name identifier",
+        examples=["http_request", "data_transform"],
     )
-    config: dict[str, Any] = Field(
+    description: str | None = Field(
+        default=None,
+        max_length=5000,
+        description="Tool functionality description",
+        examples=["Executes HTTP requests with retry logic"],
+    )
+    parameters: dict[str, Any] = Field(
         ...,
-        description="Tool-specific configuration (JSON)",
-        examples=[{"url": "https://api.example.com", "method": "POST"}],
+        description="JSON Schema for parameter validation",
+        examples=[
+            {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "format": "uri"},
+                    "timeout": {"type": "integer", "minimum": 1},
+                },
+            }
+        ],
     )
-    input_schema: dict[str, Any] = Field(
-        ...,
-        description="JSON Schema for tool input validation",
-        examples=[{"type": "object", "properties": {"url": {"type": "string"}}}],
-    )
-    output_schema: dict[str, Any] | None = Field(
+    implementation_path: str | None = Field(
         default=None,
-        description="JSON Schema for tool output validation",
+        max_length=500,
+        description="Path to tool implementation file",
+        examples=["tools/http_request.py"],
     )
-    auth_config: dict[str, Any] | None = Field(
-        default=None,
-        description="Authentication configuration (encrypted at rest)",
-    )
-    rate_limit: dict[str, Any] | None = Field(
-        default=None,
-        description="Rate limiting configuration",
-    )
-    is_active: bool = Field(
-        default=True,
-        description="Whether the tool is active and usable",
-    )
-    is_public: bool = Field(
-        default=False,
-        description="Whether the tool is publicly accessible",
-    )
-
-
-# =============================================================================
-# Create Schemas
-# =============================================================================
-
-
-class ToolCreate(ToolBase):
-    """Schema for creating a new tool."""
-
-
-# =============================================================================
-# Update Schemas
-# =============================================================================
 
 
 class ToolUpdate(BaseSchema):
-    """Schema for updating a tool.
+    """Schema for tool updates.
 
     All fields are optional to support partial updates.
     """
 
-    name: str | None = OptionalNameField
-    description: str | None = Field(default=None, max_length=2000)
-    tool_type: str | None = Field(default=None, description="Tool type")
-    config: dict[str, Any] | None = Field(
-        default=None, description="Tool configuration"
+    description: str | None = Field(
+        default=None,
+        max_length=5000,
+        description="Updated tool description",
     )
-    input_schema: dict[str, Any] | None = Field(
-        default=None, description="Input JSON Schema"
+    parameters: dict[str, Any] | None = Field(
+        default=None,
+        description="Updated JSON Schema for parameters",
     )
-    output_schema: dict[str, Any] | None = Field(
-        default=None, description="Output JSON Schema"
+    implementation_path: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Updated implementation path",
     )
-    auth_config: dict[str, Any] | None = Field(
-        default=None, description="Authentication configuration"
+    is_active: bool | None = Field(
+        default=None,
+        description="Tool active status flag",
+        examples=[True, False],
     )
-    rate_limit: dict[str, Any] | None = Field(
-        default=None, description="Rate limit config"
-    )
-    is_active: bool | None = Field(default=None, description="Active status")
-    is_public: bool | None = Field(default=None, description="Public status")
 
 
-# =============================================================================
-# Response Schemas
-# =============================================================================
+class ToolResponse(BaseResponse):
+    """Schema for tool API responses.
 
+    Includes all tool fields with timestamps.
+    """
 
-class ToolResponse(ToolBase, BaseResponse):
-    """Schema for tool response."""
+    model_config = ConfigDict(from_attributes=True)
 
-    owner_id: UUID = Field(
+    name: str = Field(
         ...,
-        description="UUID of the tool owner",
-        examples=["550e8400-e29b-41d4-a716-446655440000"],
+        description="Tool unique name identifier",
+        examples=["http_request"],
+    )
+    description: str | None = Field(
+        default=None,
+        description="Tool functionality description",
+    )
+    parameters: dict[str, Any] = Field(
+        ...,
+        description="JSON Schema for parameter validation",
+    )
+    implementation_path: str | None = Field(
+        default=None,
+        description="Path to tool implementation file",
+    )
+    is_active: bool = Field(
+        ...,
+        description="Whether the tool is currently active",
+        examples=[True],
+    )
+    # Override to make Optional for newly created tools
+    updated_at: datetime | None = Field(
+        default=None,
+        description="Timestamp when the resource was last updated",
     )
 
 
-class ToolListResponse(BaseSchema):
-    """Schema for tool list items (summary view)."""
+class ToolDetailResponse(ToolResponse):
+    """Schema for tool detail responses with relationships.
 
-    id: UUID = Field(..., description="Tool ID")
-    name: str = Field(..., description="Tool name")
-    tool_type: str = Field(..., description="Tool type")
-    is_active: bool = Field(..., description="Active status")
-    is_public: bool = Field(..., description="Public status")
-    created_at: str = Field(..., description="Creation timestamp")
+    Extends ToolResponse with usage information.
+    """
 
-
-# =============================================================================
-# Tool Test Execution Schemas
-# =============================================================================
+    used_by_agents: list[UUID] = Field(
+        default_factory=list,
+        description="List of agent IDs that use this tool",
+        examples=[["550e8400-e29b-41d4-a716-446655440000"]],
+    )
+    used_in_workflows: list[UUID] = Field(
+        default_factory=list,
+        description="List of workflow IDs that include this tool",
+        examples=[
+            [
+                "550e8400-e29b-41d4-a716-446655440001",
+                "550e8400-e29b-41d4-a716-446655440002",
+            ]
+        ],
+    )
 
 
 class ToolTestRequest(BaseSchema):
-    """Schema for tool test execution request."""
+    """Schema for tool test execution requests.
 
-    input_data: dict[str, Any] = Field(
+    Validates test parameters and timeout constraints.
+    """
+
+    params: dict[str, Any] = Field(
         ...,
-        description="Input data to test the tool with",
-        examples=[{"url": "https://api.example.com", "query": "test"}],
+        description="Test parameters matching tool's JSON Schema",
+        examples=[{"url": "https://api.example.com", "timeout": 30}],
+    )
+    timeout: int = Field(
+        default=30,
+        ge=1,
+        le=120,
+        description="Test execution timeout in seconds",
+        examples=[30, 60, 120],
     )
 
 
 class ToolTestResponse(BaseSchema):
-    """Schema for tool test execution response."""
+    """Schema for tool test execution responses.
+
+    Returns test results with execution metrics.
+    """
 
     success: bool = Field(
         ...,
-        description="Whether the tool execution was successful",
+        description="Whether the test execution succeeded",
+        examples=[True, False],
     )
-    output: dict[str, Any] | None = Field(
+    result: Any | None = Field(
         default=None,
-        description="Tool output data",
+        description="Test result data if successful",
+        examples=[{"status": "ok", "data": "response"}],
     )
     error: str | None = Field(
         default=None,
-        description="Error message if execution failed",
+        description="Error message if test failed",
+        examples=["Connection timeout after 30s"],
     )
-    execution_time_ms: float = Field(
+    execution_time_ms: int = Field(
         ...,
-        description="Tool execution time in milliseconds",
-        examples=[150.5],
+        ge=0,
+        description="Execution time in milliseconds",
+        examples=[150, 500, 1000],
+    )
+    logs: list[str] = Field(
+        default_factory=list,
+        description="Execution log messages",
+        examples=[["Starting test...", "Executing request...", "Test completed"]],
     )
 
 
 __all__ = [
-    "ToolBase",
     "ToolCreate",
-    "ToolListResponse",
+    "ToolDetailResponse",
     "ToolResponse",
     "ToolTestRequest",
     "ToolTestResponse",
