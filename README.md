@@ -258,7 +258,7 @@ npm run dev
 - [SPEC-006: Schedule Configuration Model](.moai/specs/SPEC-006/spec.md) - 구현 완료
 - [SPEC-007: Workflow API Endpoints](.moai/specs/SPEC-007/spec.md) - 구현 완료
 - [SPEC-009: Tool/Agent API Endpoints](.moai/specs/SPEC-009/spec.md) - 구현 완료
-- [SPEC-010: DAG Validation Service](.moai/specs/SPEC-010/spec.md) - 진행 중
+- [SPEC-010: DAG Validation Service](.moai/specs/SPEC-010/spec.md) - 구현 완료
 
 ## 테스트
 
@@ -291,7 +291,7 @@ open htmlcov/index.html
 - [x] Phase 1: 워크플로우 코어 모델 (SPEC-003, SPEC-004, SPEC-007)
 - [x] Phase 2: 실행 추적 모델 (SPEC-005)
 - [x] Phase 3: API 파운데이션 (SPEC-007, SPEC-008, SPEC-009)
-- [ ] Phase 4: 워크플로우 엔진 (SPEC-010 진행 중)
+- [ ] Phase 4: 워크플로우 엔진 (SPEC-010 구현 완료)
 - [ ] Phase 5: LLM 통합
 - [ ] Phase 6: 콘텐츠 파싱
 - [ ] Phase 7: 프론트엔드 개발
@@ -312,6 +312,10 @@ open htmlcov/index.html
   - 13개 RESTful API 엔드포인트 구현
   - 28개 보안 테스트 통과, 100% 테스트 커버리지
   - bcrypt 기반 비밀번호 해싱, 직접 보안 모듈 구현
+- **SPEC-010**: DAG Validation Service (DAG 검증 서비스)
+  - 4개 RESTful API 엔드포인트 구현
+  - 1,351개 테스트 통과, 89.79% 코드 커버리지
+  - 순환 감지, 위상 정렬, 검증기 그래프 구현
 
 ## 연락처
 
