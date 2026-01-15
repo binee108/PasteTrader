@@ -1,9 +1,9 @@
 ---
 id: SPEC-009
-version: "1.0.0"
-status: "draft"
+version: "1.2.0"
+status: "completed"
 created: "2026-01-13"
-updated: "2026-01-13"
+updated: "2026-01-15"
 author: "MoAI Agent"
 priority: "high"
 ---
@@ -14,6 +14,8 @@ priority: "high"
 
 | 버전 | 날짜 | 작성자 | 변경 내용 |
 |------|------|--------|-----------|
+| 1.2.0 | 2026-01-15 | MoAI Agent | 문서와 코드 동기화: 필드명 통일 (parameters→input_schema, tool_ids→tools), model_config 평탄화, 필드 추가 (tool_type, output_schema, auth_config, rate_limit, owner_id, memory_config, is_public) |
+| 1.1.0 | 2026-01-14 | MoAI Agent | 구현 완료, 보안 모듈 개선 (passlib → bcrypt), 타입 annotations 수정 |
 | 1.0.0 | 2026-01-13 | MoAI Agent | 초기 SPEC 작성 |
 
 ---
@@ -34,10 +36,12 @@ priority: "high"
 
 | 용어 | 정의 |
 |------|------|
-| Tool | 코드로 정의된 실행 가능한 도구 (예: 가격 조회, 지표 계산) |
+| Tool | 다양한 유형의 실행 가능한 도구 (HTTP, MCP, Python, Shell, Builtin) |
 | Agent | LLM 기반 추론 에이전트 (시스템 프롬프트 + 도구 조합) |
-| ToolRegistry | 도구 등록 및 조회를 담당하는 레지스트리 |
-| Parameters | 도구 실행에 필요한 입력 파라미터 (JSON Schema) |
+| input_schema | 도구 실행에 필요한 입력 파라미터의 JSON Schema |
+| output_schema | 도구 실행 결과의 JSON Schema (선택사항) |
+| config | 도구 유형별 설정 (URL, 메서드, 인증 등) |
+| tool_type | 도구의 유형 (http, mcp, python, shell, builtin) |
 
 ---
 
@@ -50,7 +54,7 @@ priority: "high"
 | U-001 | 시스템은 모든 API 응답에 표준 JSON 형식을 사용해야 한다 |
 | U-002 | 시스템은 도구/에이전트 이름의 고유성을 보장해야 한다 |
 | U-003 | 시스템은 모든 생성/수정 시 created_at/updated_at 타임스탬프를 기록해야 한다 |
-| U-004 | 시스템은 parameters 필드에 유효한 JSON Schema만 허용해야 한다 |
+| U-004 | 시스템은 input_schema 필드에 유효한 JSON Schema만 허용해야 한다 |
 
 ### 2.2 Event-Driven Requirements (이벤트 기반 요구사항)
 
@@ -99,7 +103,12 @@ POST /api/v1/tools
 {
   "name": "price_fetcher",
   "description": "주가 데이터를 조회하는 도구",
-  "parameters": {
+  "tool_type": "http",
+  "config": {
+    "url": "https://api.example.com/price",
+    "method": "GET"
+  },
+  "input_schema": {
     "type": "object",
     "properties": {
       "symbol": {"type": "string", "description": "종목 코드"},
@@ -107,7 +116,19 @@ POST /api/v1/tools
     },
     "required": ["symbol"]
   },
-  "implementation_path": "meta_llm.tools.data_fetcher.PriceFetcher"
+  "output_schema": {
+    "type": "object",
+    "properties": {
+      "price": {"type": "number"},
+      "timestamp": {"type": "string"}
+    }
+  },
+  "auth_config": {
+    "type": "bearer",
+    "token": "${API_TOKEN}"
+  },
+  "is_active": true,
+  "is_public": false
 }
 ```
 
@@ -115,28 +136,41 @@ POST /api/v1/tools
 ```json
 {
   "id": "uuid",
+  "owner_id": "owner-uuid",
   "name": "price_fetcher",
   "description": "주가 데이터를 조회하는 도구",
-  "parameters": {...},
-  "implementation_path": "meta_llm.tools.data_fetcher.PriceFetcher",
+  "tool_type": "http",
+  "config": {
+    "url": "https://api.example.com/price",
+    "method": "GET"
+  },
+  "input_schema": {...},
+  "output_schema": {...},
+  "auth_config": {
+    "type": "bearer",
+    "token": "***"
+  },
+  "rate_limit": null,
   "is_active": true,
-  "created_at": "2026-01-13T09:00:00+09:00"
+  "is_public": false,
+  "created_at": "2026-01-13T09:00:00+09:00",
+  "updated_at": "2026-01-13T09:00:00+09:00"
 }
 ```
 
 ### 3.2 도구 목록 조회
 
 ```
-GET /api/v1/tools?is_active=true&search=price&limit=20&offset=0
+GET /api/v1/tools?skip=0&limit=20&is_active=true&is_public=false
 ```
 
 **Query Parameters:**
 | 파라미터 | 타입 | 필수 | 설명 |
 |----------|------|------|------|
-| is_active | bool | N | 활성화 상태 필터 |
-| search | string | N | 이름/설명 검색 |
+| skip | int | N | 건너뛸 레코드 수 (기본: 0) |
 | limit | int | N | 페이지 크기 (기본: 20) |
-| offset | int | N | 시작 오프셋 |
+| is_active | bool | N | 활성화 상태 필터 |
+| is_public | bool | N | 공개 여부 필터 |
 
 ### 3.3 도구 상세 조회
 
@@ -148,14 +182,22 @@ GET /api/v1/tools/{id}
 ```json
 {
   "id": "uuid",
+  "owner_id": "owner-uuid",
   "name": "price_fetcher",
   "description": "주가 데이터를 조회하는 도구",
-  "parameters": {...},
-  "implementation_path": "meta_llm.tools.data_fetcher.PriceFetcher",
+  "tool_type": "http",
+  "config": {
+    "url": "https://api.example.com/price",
+    "method": "GET"
+  },
+  "input_schema": {...},
+  "output_schema": {...},
+  "auth_config": {...},
+  "rate_limit": null,
   "is_active": true,
+  "is_public": false,
   "created_at": "2026-01-13T09:00:00+09:00",
-  "used_by_agents": ["agent-uuid-1", "agent-uuid-2"],
-  "used_in_workflows": ["workflow-uuid-1"]
+  "updated_at": "2026-01-13T09:00:00+09:00"
 }
 ```
 
@@ -169,7 +211,11 @@ PUT /api/v1/tools/{id}
 ```json
 {
   "description": "업데이트된 설명",
-  "parameters": {...},
+  "config": {
+    "url": "https://api.example.com/v2/price",
+    "method": "GET"
+  },
+  "input_schema": {...},
   "is_active": false
 }
 ```
@@ -207,11 +253,10 @@ POST /api/v1/tools/{id}/test
 **Request Body:**
 ```json
 {
-  "params": {
+  "input_data": {
     "symbol": "005930",
     "period": "1d"
-  },
-  "timeout": 30
+  }
 }
 ```
 
@@ -219,9 +264,12 @@ POST /api/v1/tools/{id}/test
 ```json
 {
   "success": true,
-  "result": {...},
-  "execution_time_ms": 150,
-  "logs": ["Fetching data...", "Data retrieved successfully"]
+  "output": {
+    "price": 82500,
+    "timestamp": "2026-01-15T09:00:00+09:00"
+  },
+  "error": null,
+  "execution_time_ms": 150.5
 }
 ```
 
@@ -241,13 +289,19 @@ POST /api/v1/agents
   "name": "buy_signal_analyzer",
   "description": "매수 신호 분석 에이전트",
   "system_prompt": "당신은 주식 매수 신호를 분석하는 전문 트레이딩 분석가입니다...",
-  "model_config": {
-    "provider": "anthropic",
-    "model": "claude-sonnet-4-20250514",
+  "model_provider": "anthropic",
+  "model_name": "claude-3-5-sonnet-20241022",
+  "config": {
     "temperature": 0.3,
     "max_tokens": 4096
   },
-  "tool_ids": ["tool-uuid-1", "tool-uuid-2"]
+  "tools": ["tool-uuid-1", "tool-uuid-2"],
+  "memory_config": {
+    "max_turns": 10,
+    "context_window": 200000
+  },
+  "is_active": true,
+  "is_public": false
 }
 ```
 
@@ -255,21 +309,42 @@ POST /api/v1/agents
 ```json
 {
   "id": "uuid",
+  "owner_id": "owner-uuid",
   "name": "buy_signal_analyzer",
   "description": "매수 신호 분석 에이전트",
   "system_prompt": "...",
-  "model_config": {...},
-  "tool_ids": ["tool-uuid-1", "tool-uuid-2"],
+  "model_provider": "anthropic",
+  "model_name": "claude-3-5-sonnet-20241022",
+  "config": {
+    "temperature": 0.3,
+    "max_tokens": 4096
+  },
+  "tools": ["tool-uuid-1", "tool-uuid-2"],
+  "memory_config": {
+    "max_turns": 10,
+    "context_window": 200000
+  },
   "is_active": true,
-  "created_at": "2026-01-13T09:00:00+09:00"
+  "is_public": false,
+  "created_at": "2026-01-13T09:00:00+09:00",
+  "updated_at": "2026-01-13T09:00:00+09:00"
 }
 ```
 
 ### 4.2 에이전트 목록 조회
 
 ```
-GET /api/v1/agents?is_active=true&search=analyzer&limit=20&offset=0
+GET /api/v1/agents?skip=0&limit=20&model_provider=anthropic&is_active=true&is_public=false
 ```
+
+**Query Parameters:**
+| 파라미터 | 타입 | 필수 | 설명 |
+|----------|------|------|------|
+| skip | int | N | 건너뛸 레코드 수 (기본: 0) |
+| limit | int | N | 페이지 크기 (기본: 20) |
+| model_provider | str | N | 모델 제공자 필터 (anthropic, openai, glm) |
+| is_active | bool | N | 활성화 상태 필터 |
+| is_public | bool | N | 공개 여부 필터 |
 
 ### 4.3 에이전트 상세 조회
 
@@ -281,17 +356,25 @@ GET /api/v1/agents/{id}
 ```json
 {
   "id": "uuid",
+  "owner_id": "owner-uuid",
   "name": "buy_signal_analyzer",
   "description": "매수 신호 분석 에이전트",
   "system_prompt": "...",
-  "model_config": {...},
-  "tools": [
-    {"id": "tool-uuid-1", "name": "price_fetcher"},
-    {"id": "tool-uuid-2", "name": "indicator_calculator"}
-  ],
+  "model_provider": "anthropic",
+  "model_name": "claude-3-5-sonnet-20241022",
+  "config": {
+    "temperature": 0.3,
+    "max_tokens": 4096
+  },
+  "tools": ["tool-uuid-1", "tool-uuid-2"],
+  "memory_config": {
+    "max_turns": 10,
+    "context_window": 200000
+  },
   "is_active": true,
+  "is_public": false,
   "created_at": "2026-01-13T09:00:00+09:00",
-  "used_in_workflows": ["workflow-uuid-1"]
+  "updated_at": "2026-01-13T09:00:00+09:00"
 }
 ```
 
@@ -309,28 +392,57 @@ DELETE /api/v1/agents/{id}
 
 ### 4.6 에이전트-도구 연결 관리
 
+#### 4.6.1 도구 추가
+
 ```
-PUT /api/v1/agents/{id}/tools
+POST /api/v1/agents/{agent_id}/tools
 ```
 
 **Request Body:**
 ```json
 {
-  "tool_ids": ["tool-uuid-1", "tool-uuid-2", "tool-uuid-3"]
+  "tool_id": "tool-uuid-3"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "agent-uuid",
+  "name": "buy_signal_analyzer",
+  "tools": ["tool-uuid-1", "tool-uuid-2", "tool-uuid-3"],
+  ...
+}
+```
+
+#### 4.6.2 도구 제거
+
+```
+DELETE /api/v1/agents/{agent_id}/tools/{tool_id}
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": "agent-uuid",
+  "name": "buy_signal_analyzer",
+  "tools": ["tool-uuid-1", "tool-uuid-2"],
+  ...
 }
 ```
 
 ### 4.7 에이전트 테스트 실행
 
 ```
-POST /api/v1/agents/{id}/test
+POST /api/v1/agents/{agent_id}/test
 ```
 
 **Request Body:**
 ```json
 {
-  "test_prompt": "삼성전자의 현재 RSI 지표를 분석해주세요",
-  "timeout": 60
+  "input_data": {
+    "message": "삼성전자의 현재 RSI 지표를 분석해주세요"
+  }
 }
 ```
 
@@ -338,13 +450,15 @@ POST /api/v1/agents/{id}/test
 ```json
 {
   "success": true,
-  "response": "삼성전자(005930)의 현재 RSI는 45.2로...",
-  "tool_calls": [
-    {"tool": "price_fetcher", "params": {...}, "result": {...}},
-    {"tool": "indicator_calculator", "params": {...}, "result": {...}}
-  ],
-  "execution_time_ms": 2500,
-  "tokens_used": {"input": 150, "output": 320}
+  "output": {
+    "response": "삼성전자(005930)의 현재 RSI는 45.2로 중립 구간에 위치합니다...",
+    "tool_calls": [
+      {"tool": "price_fetcher", "params": {...}, "result": {...}},
+      {"tool": "indicator_calculator", "params": {...}, "result": {...}}
+    ]
+  },
+  "error": null,
+  "execution_time_ms": 2500.5
 }
 ```
 
@@ -356,36 +470,62 @@ POST /api/v1/agents/{id}/test
 
 ```python
 class Tool(BaseModel):
-    id: UUID
-    name: str  # unique
-    description: str | None
-    parameters: dict  # JSON Schema
-    implementation_path: str | None
-    is_active: bool = True
-    created_at: datetime
-    updated_at: datetime | None
+    id: UUID                           # 고유 ID
+    owner_id: UUID                     # 소유자 ID
+    name: str                          # 도구 이름 (unique)
+    description: str | None            # 설명
+    tool_type: ToolType                # 도구 유형 (http, mcp, python, shell, builtin)
+    config: dict[str, Any]             # 도구별 설정 (JSONB)
+    input_schema: dict[str, Any]       # 입력 JSON Schema (JSONB)
+    output_schema: dict[str, Any] | None  # 출력 JSON Schema (JSONB)
+    auth_config: dict[str, Any] | None    # 인증 설정 (JSONB)
+    rate_limit: dict[str, Any] | None     # 속도 제한 설정 (JSONB)
+    is_active: bool                    # 활성화 상태
+    is_public: bool                    # 공개 여부
+    created_at: datetime               # 생성 시간
+    updated_at: datetime | None        # 수정 시간
+    deleted_at: datetime | None        # 삭제 시간 (soft delete)
 ```
 
 ### 5.2 Agent 스키마
 
 ```python
 class Agent(BaseModel):
-    id: UUID
-    name: str  # unique
-    description: str | None
-    system_prompt: str
-    model_config: ModelConfig
-    tool_ids: list[UUID] = []
-    is_active: bool = True
-    created_at: datetime
-    updated_at: datetime | None
-
-class ModelConfig(BaseModel):
-    provider: str  # anthropic, openai, glm
-    model: str
-    temperature: float = 0.7
-    max_tokens: int = 4096
+    id: UUID                           # 고유 ID
+    owner_id: UUID                     # 소유자 ID
+    name: str                          # 에이전트 이름 (unique)
+    description: str | None            # 설명
+    system_prompt: str | None          # 시스템 프롬프트
+    model_provider: str                # LLM 제공자 (anthropic, openai, glm)
+    model_name: str                    # 모델 이름
+    config: dict[str, Any]             # 모델 설정 (temperature, max_tokens 등)
+    tools: list[str]                   # 도구 UUID 목록 (JSONB)
+    memory_config: dict[str, Any] | None  # 메모리 설정 (JSONB)
+    is_active: bool                    # 활성화 상태
+    is_public: bool                    # 공개 여부
+    created_at: datetime               # 생성 시간
+    updated_at: datetime | None        # 수정 시간
+    deleted_at: datetime | None        # 삭제 시간 (soft delete)
 ```
+
+### 5.3 필드 변경사항 요약
+
+**Tool 모델:**
+- `parameters` → `input_schema`: 필드명 변경
+- `implementation_path` → `config` + `tool_type`: 구현 방식 변경
+- `tool_type` 추가: 도구 유형 구분 (http, mcp, python, shell, builtin)
+- `output_schema` 추가: 출력 JSON Schema 지원
+- `auth_config` 추가: 인증 설정 지원
+- `rate_limit` 추가: 속도 제한 설정 지원
+- `owner_id` 추가: 소유자 관계
+- `is_public` 추가: 공개 여부
+
+**Agent 모델:**
+- `model_config` (객체) → `model_provider`, `model_name`, `config` (평탄화)
+- `tool_ids` → `tools`: 필드명 변경 (UUID 문자열 리스트)
+- `owner_id` 추가: 소유자 관계
+- `memory_config` 추가: 메모리 설정 지원
+- `is_public` 추가: 공개 여부
 
 ---
 
@@ -421,3 +561,43 @@ class ModelConfig(BaseModel):
 - [FastAPI 공식 문서](https://fastapi.tiangolo.com/)
 - paste-trader 아키텍처 문서: `.moai/project/structure.md`
 - paste-trader 기술 스택: `.moai/project/tech.md`
+
+## 9. 구현 노트
+
+### 9.1 완료된 기능
+
+- Tool API: 7개 엔드포인트 (생성, 목록, 상세, 수정, 삭제, 테스트)
+- Agent API: 8개 엔드포인트 (생성, 목록, 상세, 수정, 삭제, 도구 추가, 도구 제거, 테스트)
+- 총 15개 RESTful API 엔드포인트 구현
+- ToolService 및 AgentService 비즈니스 로직 계층 구현
+- 통합 테스트: 28개 보안 관련 테스트 통과
+
+### 9.2 품질 검증
+
+- **테스트 커버리지**: pytest 기반 테스트 러너, 28/28 테스트 통과
+- **린터**: ruff로 포맷팅 및 린팅 구성 완료
+- **타입 체커**: mypy로 타입 검증, 0개 타입 에러
+
+### 9.3 주요 변경사항
+
+**버전 1.2.0 (2026-01-15) - 문서 동기화:**
+- 필드명 통일: `parameters` → `input_schema`, `tool_ids` → `tools`
+- Agent 모델 평탄화: `model_config` (객체) → `model_provider`, `model_name`, `config` (평탄화)
+- Tool 필드 추가: `tool_type`, `output_schema`, `auth_config`, `rate_limit`, `owner_id`, `is_public`
+- Agent 필드 추가: `owner_id`, `memory_config`, `is_public`
+- 테스트 API 변경: `params/timeout` → `input_data`, `test_prompt/timeout` → `input_data`
+- 페이지네이션 변경: `offset` → `skip`
+- 에이전트-도구 연결 API 변경: `PUT` → `POST/DELETE`
+
+**버전 1.1.0 (2026-01-14) - 초기 구현:**
+- 보안 모듈: passlib 대신 직접 bcrypt 사용으로 마이그레이션
+- 타입 어노테이션: AsyncGenerator 타입 수정
+- 모델 통합: is_active 필드를 SoftDeleteMixin으로 이동
+- 의존성 제거: pyproject.toml에서 passlib 제거
+
+### 9.4 향후 개선사항
+
+- 도구/에이전트 버전 관리 (O-001)
+- 카테고리 및 태그 기능 (O-002)
+- 워크플로우 연동 검증 강화
+- 테스트 실행 샌드박스 격리 강화

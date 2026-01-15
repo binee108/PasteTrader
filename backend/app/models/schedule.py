@@ -31,7 +31,10 @@ if TYPE_CHECKING:
     from app.models.workflow import Workflow
 
 # Use JSONB for PostgreSQL, JSON for other databases (like SQLite for testing)
-from app.models.workflow import JSONType
+from sqlalchemy import JSON
+from sqlalchemy.dialects.postgresql import JSONB
+
+JSONType = JSON().with_variant(JSONB(), "postgresql")
 
 
 class Schedule(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
@@ -173,13 +176,6 @@ class Schedule(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
         nullable=False,
         default="UTC",
         server_default="UTC",
-    )
-
-    is_active: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=True,
-        server_default="true",
     )
 
     # APScheduler integration

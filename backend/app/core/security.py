@@ -27,16 +27,8 @@ from __future__ import annotations
 import re
 from time import perf_counter
 
-# Fix compatibility between passlib 1.7.4 and bcrypt 4.x
-# bcrypt 4.x removed __about__ attribute, add a workaround
 import bcrypt
 
-if not hasattr(bcrypt, "__about__"):
-    class _About:
-        __version__ = getattr(bcrypt, "__version__", "4.1.3")
-    bcrypt.__about__ = _About()  # type: ignore[attr-defined]
-
-from passlib.context import CryptContext  # type: ignore[import-untyped]
 
 
 class PasswordComplexityError(ValueError):
@@ -57,7 +49,26 @@ class PasswordComplexityError(ValueError):
 # Bcrypt configuration with cost factor 12
 # Cost factor 12 provides good security vs performance balance
 # Each increment doubles the hashing time
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
+BCRYPT_ROUNDS = 12
+BCRYPT_SALT_PREFIX = b"$2b$12$"
+
+
+def _prepare_password(password: str) -> bytes:
+    """Prepare password for bcrypt hashing.
+
+    Bcrypt has a 72-byte limit on password length. This function
+    truncates passwords longer than 72 bytes before encoding.
+
+    Args:
+        password: Plain text password to prepare
+
+    Returns:
+        Password bytes truncated to 72 bytes if necessary
+    """
+    password_bytes = password.encode("utf-8")
+    if len(password_bytes) > 72:
+        password_bytes = password_bytes[:72]
+    return password_bytes
 
 
 def hash_password(password: str) -> str:
@@ -96,13 +107,7 @@ def hash_password(password: str) -> str:
 
     # Log password hashing operation (without sensitive data)
     password_length = len(password)
-    truncated = False
-
-    # Bcrypt has a 72-byte limit, truncate if necessary
-    password_bytes = password.encode("utf-8")
-    if len(password_bytes) > 72:
-        password = password_bytes[:72].decode("utf-8", errors="ignore")
-        truncated = True
+    truncated = len(password.encode("utf-8")) > 72
 
     logger.debug(
         "Password hashing operation",
@@ -115,7 +120,13 @@ def hash_password(password: str) -> str:
         },
     )
 
-    hashed: str = pwd_context.hash(password)
+    # Prepare password (truncate to 72 bytes if necessary)
+    password_bytes = _prepare_password(password)
+
+    # Generate salt and hash
+    salt = bcrypt.gensalt(rounds=BCRYPT_ROUNDS)
+    hashed_bytes = bcrypt.hashpw(password_bytes, salt)
+    hashed: str = hashed_bytes.decode("utf-8")
 
     logger.info(
         "Password hashed successfully",
@@ -175,13 +186,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
     # Log password verification operation (without sensitive data)
     password_length = len(plain_password)
-    truncated = False
-
-    # Bcrypt has a 72-byte limit, truncate if necessary
-    password_bytes = plain_password.encode("utf-8")
-    if len(password_bytes) > 72:
-        plain_password = password_bytes[:72].decode("utf-8", errors="ignore")
-        truncated = True
+    truncated = len(plain_password.encode("utf-8")) > 72
 
     # Validate hash format
     valid_hash_format = (
@@ -201,7 +206,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     )
 
     try:
-        result: bool = pwd_context.verify(plain_password, hashed_password)
+        # Prepare password (truncate to 72 bytes if necessary)
+        password_bytes = _prepare_password(plain_password)
+        hashed_bytes = hashed_password.encode("utf-8")
+
+        # Use bcrypt's timing-safe verify
+        result: bool = bcrypt.checkpw(password_bytes, hashed_bytes)
 
         logger.info(
             "Password verification completed",

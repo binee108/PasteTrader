@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- SPEC-009: Tool/Agent API Endpoints 구현 완료
+  - Tool API: 7개 엔드포인트 (생성, 목록, 상세, 수정, 삭제, 테스트)
+  - Agent API: 6개 엔드포인트 (생성, 목록, 상세, 수정, 삭제, 도구 연결, 테스트)
+  - ToolService 및 AgentService 비즈니스 로직 계층 구현
+  - 28개 보안 테스트 통과, 100% 테스트 커버리지
+  - mypy 타입 체크 0 에러
 - SPEC-005: Execution Tracking Models 구현 완료
   - WorkflowExecution 모델: 워크플로우 실행 인스턴스 추적
   - NodeExecution 모델: 개별 노드 실행 상태 추적
@@ -17,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Phase 2 상태 변경: 실행 추적 모델 완료
+- 보안 모듈 개선: passlib 대신 직접 bcrypt 사용
+- 타입 어노테이션 수정: AsyncGenerator 타입 수정
+- 모델 구조 통합: is_active 필드를 SoftDeleteMixin으로 이동
+
+### Removed
+- passlib 의존성 제거 (pyproject.toml)
 
 ## [0.1.0] - 2026-01-12
 

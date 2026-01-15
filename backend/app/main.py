@@ -31,7 +31,7 @@ logger = get_logger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG001 - Required by FastAPI lifespan interface
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001 - Required by FastAPI lifespan interface
     """Application lifespan context manager.
 
     Handles startup and shutdown events for the application.

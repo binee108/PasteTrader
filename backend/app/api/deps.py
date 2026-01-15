@@ -8,12 +8,17 @@ REQ: REQ-007 - API Route Dependencies
 """
 
 from typing import Annotated, Any
+from uuid import UUID
 
-from fastapi import Depends, Query
+from fastapi import Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import InvalidToolConfigError
+from app.core.jwt import verify_token
 from app.db.session import get_db
+from app.models.user import User
 
 # =============================================================================
 # Database Session Dependency
@@ -143,47 +148,142 @@ Usage:
 
 
 # =============================================================================
-# Authentication Dependencies (Placeholder)
+# Authentication Dependencies
 # =============================================================================
 
-# TODO: Implement actual authentication when auth system is added
 
-
-async def get_current_user_optional() -> Any | None:
+async def get_current_user_optional(
+    db: AsyncSession,
+    authorization: str | None = None,
+) -> User | None:
     """Get current user if authenticated (optional).
+
+    This function safely handles missing or invalid authentication,
+    returning None instead of raising exceptions.
+
+    Args:
+        db: Database session for querying user.
+        authorization: Authorization header value (format: "Bearer <token>").
 
     Returns:
         User object if authenticated, None otherwise.
     """
-    # Placeholder for future implementation
-    return None
+    # No authorization header provided
+    if authorization is None:
+        return None
+
+    # Check for Bearer scheme
+    if not authorization.startswith("Bearer "):
+        return None
+
+    # Extract token
+    try:
+        token = authorization.split(" ")[1]
+        if not token:
+            return None
+    except IndexError:
+        return None
+
+    # Verify token and get user ID
+    user_id = verify_token(token)
+    if user_id is None:
+        return None
+
+    # Query user from database
+    try:
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        return user
+    except Exception:
+        return None
 
 
-async def get_current_user() -> Any:
+async def get_current_user(
+    db: AsyncSession,
+    authorization: str | None = None,
+) -> User:
     """Get current authenticated user (required).
 
+    This function raises HTTPException if authentication fails.
+
+    Args:
+        db: Database session for querying user.
+        authorization: Authorization header value (format: "Bearer <token>").
+
     Raises:
-        HTTPException: 401 if not authenticated.
+        HTTPException: 401 if not authenticated or user not found.
 
     Returns:
         User object.
     """
-    # Placeholder for future implementation
-    # When implemented, this should:
-    # 1. Extract token from Authorization header
-    # 2. Validate and decode JWT token
-    # 3. Fetch user from database
-    # 4. Raise HTTPException(401) if invalid
-    from fastapi import HTTPException, status
+    # No authorization header provided
+    if authorization is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    # Check for Bearer scheme
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+        )
+
+    # Extract token
+    try:
+        token = authorization.split(" ")[1]
+        if not token:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials",
+            )
+    except IndexError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+        )
+
+    # Verify token and get user ID
+    user_id = verify_token(token)
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+        )
+
+    # Validate that user_id is a valid UUID
+    try:
+        user_uuid = UUID(user_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+        )
+
+    # Query user from database
+    try:
+        result = await db.execute(select(User).where(User.id == user_uuid))
+        user = result.scalar_one_or_none()
+
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+            )
+
+        return user
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+        )
 
 
-CurrentUserOptional = Annotated[Any | None, Depends(get_current_user_optional)]
+CurrentUserOptional = Annotated[User | None, Depends(get_current_user_optional)]
 """Type alias for optional current user dependency.
 
 Usage:
@@ -197,7 +297,7 @@ Usage:
             pass
 """
 
-CurrentUser = Annotated[Any, Depends(get_current_user)]
+CurrentUser = Annotated[User, Depends(get_current_user)]
 """Type alias for required current user dependency.
 
 Usage:

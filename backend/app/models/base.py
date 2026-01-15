@@ -129,6 +129,18 @@ class SoftDeleteMixin:
             nullable=True,
         )
 
+    @declared_attr
+    def is_active(cls) -> Mapped[bool]:
+        """Whether the record is active (not soft-deleted)."""
+        from sqlalchemy import Boolean
+
+        return mapped_column(
+            Boolean,
+            nullable=False,
+            default=True,
+            server_default="true",
+        )
+
     @property
     def is_deleted(self) -> bool:
         """Check if the record has been soft-deleted.
