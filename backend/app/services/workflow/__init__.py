@@ -20,8 +20,8 @@ Example:
 
 from app.services.workflow.algorithms import GraphAlgorithms
 from app.services.workflow.exceptions import (
-    DAGValidationError,
     CycleDetectedError,
+    DAGValidationError,
     GraphTooLargeError,
     InvalidNodeReferenceError,
     ValidationTimeoutError,
@@ -30,16 +30,16 @@ from app.services.workflow.graph import Graph
 from app.services.workflow.validator import DAGValidator
 
 __all__ = [
+    "CycleDetectedError",
+    # Exceptions
+    "DAGValidationError",
+    # Validator
+    "DAGValidator",
     # Data structures
     "Graph",
     # Algorithms
     "GraphAlgorithms",
-    # Validator
-    "DAGValidator",
-    # Exceptions
-    "DAGValidationError",
-    "CycleDetectedError",
-    "InvalidNodeReferenceError",
     "GraphTooLargeError",
+    "InvalidNodeReferenceError",
     "ValidationTimeoutError",
 ]

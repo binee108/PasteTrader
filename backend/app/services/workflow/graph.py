@@ -17,12 +17,12 @@ Space Complexity: O(V + E)
 
 from collections import defaultdict
 from collections.abc import Hashable
-from typing import Generic, TypeVar
+from typing import TypeVar
 
 NodeId = TypeVar("NodeId", bound=Hashable)
 
 
-class Graph(Generic[NodeId]):
+class Graph[NodeId: Hashable]:
     """Directed graph data structure for DAG operations.
 
     TAG: [SPEC-010] [DAG] [GRAPH]
@@ -42,7 +42,7 @@ class Graph(Generic[NodeId]):
         [uuid2]
     """
 
-    __slots__ = ("_adjacency", "_reverse_adjacency", "_nodes", "_edge_count")
+    __slots__ = ("_adjacency", "_edge_count", "_nodes", "_reverse_adjacency")
 
     def __init__(self) -> None:
         """Initialize an empty directed graph."""

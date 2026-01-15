@@ -27,18 +27,17 @@ Space Complexity: O(V + E) for all algorithms.
 from __future__ import annotations
 
 from collections import deque
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 from uuid import UUID
-
-from app.services.workflow.graph import Graph
 
 if TYPE_CHECKING:
     from app.models.enums import NodeType
+    from app.services.workflow.graph import Graph
 
 NodeId = TypeVar("NodeId", bound=UUID)
 
 
-class GraphAlgorithms(Generic[NodeId]):
+class GraphAlgorithms[NodeId: UUID]:
     """Collection of graph algorithms for DAG validation.
 
     TAG: [SPEC-010] [DAG] [ALGORITHMS]
@@ -96,8 +95,7 @@ class GraphAlgorithms(Generic[NodeId]):
                 elif neighbor in rec_stack:
                     # Found a cycle - extract the cycle path
                     cycle_start = path.index(neighbor)
-                    cycle = path[cycle_start:] + [neighbor]
-                    return cycle
+                    return [*path[cycle_start:], neighbor]
 
             path.pop()
             rec_stack.remove(node)
@@ -154,12 +152,16 @@ class GraphAlgorithms(Generic[NodeId]):
 
             if current == source:
                 # Reconstruct the cycle path
-                cycle: list[NodeId] = [source]
-                node = target
+                # Path from target to source exists, build the cycle
+                reversed_path: list[NodeId] = []
+                node: NodeId | None = source
                 while node is not None:
-                    cycle.append(node)
+                    reversed_path.append(node)
                     node = path.get(node)
-                return cycle
+                # Reverse to get path from target to source
+                reversed_path.reverse()
+                # Add the proposed edge (source -> target) to complete the cycle
+                return [source, *reversed_path]
 
             visited.add(current)
 
@@ -283,8 +285,7 @@ class GraphAlgorithms(Generic[NodeId]):
                     queue.append(successor)
 
         # Find nodes that were never reached
-        unreachable = graph._nodes - reachable
-        return unreachable
+        return graph._nodes - reachable
 
     @staticmethod
     def find_dangling_nodes(graph: Graph[NodeId]) -> set[NodeId]:
@@ -415,7 +416,7 @@ class GraphAlgorithms(Generic[NodeId]):
                 successor_path, successor_length = dfs(successor)
                 if successor_length + 1 > best_length:
                     best_length = successor_length + 1
-                    best_path = [node] + successor_path
+                    best_path = [node, *successor_path]
 
             if not best_path:
                 best_path = [node]
@@ -485,6 +486,6 @@ DAGAlgorithms = GraphAlgorithms
 
 
 __all__ = [
-    "GraphAlgorithms",
     "DAGAlgorithms",
+    "GraphAlgorithms",
 ]

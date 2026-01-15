@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enums import NodeType
@@ -21,10 +21,9 @@ from app.schemas.validation import (
     CycleCheckResult,
     TopologyLevel,
     TopologyResult,
-    ValidationError,
+    ValidationError as ValidationErrorDTO,
     ValidationErrorCode,
     ValidationLevel,
-    ValidationError as ValidationErrorDTO,
     ValidationOptions,
     ValidationResult,
     ValidationWarning,
@@ -32,11 +31,11 @@ from app.schemas.validation import (
 from app.services.workflow.algorithms import GraphAlgorithms
 from app.services.workflow.exceptions import (
     CycleDetectedError,
-    GraphTooLargeError,
     InvalidNodeReferenceError,
-    ValidationTimeoutError,
 )
 from app.services.workflow.graph import Graph
+
+type _Graph = Graph[UUID]
 
 
 class DAGValidator:
@@ -167,6 +166,10 @@ class DAGValidator:
         errors: list[ValidationErrorDTO] = []
         warnings: list[ValidationWarning] = []
 
+        # Fetch workflow for version
+        workflow = await self._get_workflow(workflow_id)
+        workflow_version = workflow.version if workflow else 1
+
         # Check self-loop
         if source_node_id == target_node_id:
             errors.append(
@@ -180,7 +183,7 @@ class DAGValidator:
             return ValidationResult(
                 is_valid=False,
                 workflow_id=workflow_id,
-                workflow_version=0,
+                workflow_version=workflow_version,
                 validated_at=datetime.now(UTC),
                 errors=errors,
                 warnings=warnings,
@@ -210,7 +213,7 @@ class DAGValidator:
             return ValidationResult(
                 is_valid=False,
                 workflow_id=workflow_id,
-                workflow_version=0,
+                workflow_version=workflow_version,
                 validated_at=datetime.now(UTC),
                 errors=errors,
                 warnings=warnings,
@@ -256,7 +259,7 @@ class DAGValidator:
         return ValidationResult(
             is_valid=len(errors) == 0,
             workflow_id=workflow_id,
-            workflow_version=0,
+            workflow_version=workflow_version,
             validated_at=datetime.now(UTC),
             errors=errors,
             warnings=warnings,
@@ -283,6 +286,10 @@ class DAGValidator:
         errors: list[ValidationErrorDTO] = []
         warnings: list[ValidationWarning] = []
 
+        # Fetch workflow for version
+        workflow = await self._get_workflow(workflow_id)
+        workflow_version = workflow.version if workflow else 1
+
         # Fetch current graph
         nodes, edges = await self._get_workflow_graph_data(workflow_id)
         graph = self._build_graph(nodes, edges)
@@ -292,8 +299,8 @@ class DAGValidator:
         for edge_data in edges_data:
             source_id = UUID(edge_data["source_node_id"])
             target_id = UUID(edge_data["target_node_id"])
-            source_handle = edge_data.get("source_handle")
-            target_handle = edge_data.get("target_handle")
+            edge_data.get("source_handle")
+            edge_data.get("target_handle")
 
             # Check self-loop
             if source_id == target_id:
@@ -347,7 +354,7 @@ class DAGValidator:
         return ValidationResult(
             is_valid=len(errors) == 0,
             workflow_id=workflow_id,
-            workflow_version=0,
+            workflow_version=workflow_version,
             validated_at=datetime.now(UTC),
             errors=errors,
             warnings=warnings,
@@ -449,7 +456,7 @@ class DAGValidator:
 
         return nodes, edges
 
-    def _build_graph(self, nodes: list[Node], edges: list[Edge]) -> Graph:
+    def _build_graph(self, nodes: list[Node], edges: list[Edge]) -> _Graph:
         """Build Graph data structure from nodes and edges."""
         graph = Graph[UUID]()
 
@@ -465,7 +472,7 @@ class DAGValidator:
 
     def _validate_size_limits(
         self,
-        graph: Graph,
+        graph: _Graph,
         options: ValidationOptions,
         errors: list[ValidationErrorDTO],
     ) -> None:
@@ -474,7 +481,7 @@ class DAGValidator:
             errors.append(
                 ValidationErrorDTO(
                     code=ValidationErrorCode.GRAPH_TOO_LARGE,
-                    message=f"Workflow exceeds maximum node limit",
+                    message="Workflow exceeds maximum node limit",
                     details={
                         "current": graph.node_count,
                         "limit": options.max_nodes,
@@ -487,7 +494,7 @@ class DAGValidator:
             errors.append(
                 ValidationErrorDTO(
                     code=ValidationErrorCode.GRAPH_TOO_LARGE,
-                    message=f"Workflow exceeds maximum edge limit",
+                    message="Workflow exceeds maximum edge limit",
                     details={
                         "current": graph.edge_count,
                         "limit": options.max_edges,
@@ -498,7 +505,7 @@ class DAGValidator:
 
     def _validate_structural(
         self,
-        graph: Graph,
+        graph: _Graph,
         nodes: list[Node],
         edges: list[Edge],
         errors: list[ValidationErrorDTO],
@@ -520,7 +527,12 @@ class DAGValidator:
         # Check for duplicate edges
         edge_signatures: dict[tuple[UUID, UUID, str | None, str | None], int] = {}
         for edge in edges:
-            sig = (edge.source_node_id, edge.target_node_id, edge.source_handle, edge.target_handle)
+            sig = (
+                edge.source_node_id,
+                edge.target_node_id,
+                edge.source_handle,
+                edge.target_handle,
+            )
             edge_signatures[sig] = edge_signatures.get(sig, 0) + 1
 
         duplicates = [
@@ -529,25 +541,27 @@ class DAGValidator:
         if duplicates:
             dup_edges = []
             for (source, target, src_handle, tgt_handle), count in duplicates:
-                dup_edges.append({
-                    "source": str(source),
-                    "target": str(target),
-                    "source_handle": src_handle,
-                    "target_handle": tgt_handle,
-                    "count": count,
-                })
+                dup_edges.append(
+                    {
+                        "source": str(source),
+                        "target": str(target),
+                        "source_handle": src_handle,
+                        "target_handle": tgt_handle,
+                        "count": count,
+                    }
+                )
 
             errors.append(
                 ValidationErrorDTO(
                     code=ValidationErrorCode.DUPLICATE_EDGE,
-                    message=f"Duplicate edges detected",
+                    message="Duplicate edges detected",
                     details={"duplicates": dup_edges},
                 )
             )
 
     def _validate_connectivity(
         self,
-        graph: Graph,
+        graph: _Graph,
         nodes: list[Node],
         errors: list[ValidationErrorDTO],
         warnings: list[ValidationWarning],
@@ -569,7 +583,7 @@ class DAGValidator:
             errors.append(
                 ValidationErrorDTO(
                     code=ValidationErrorCode.DANGLING_NODES,
-                    message=f"Isolated nodes detected with no connections",
+                    message="Isolated nodes detected with no connections",
                     node_ids=list(dangling),
                     details={"dangling_node_ids": [str(n) for n in dangling]},
                 )
@@ -583,7 +597,7 @@ class DAGValidator:
                 errors.append(
                     ValidationErrorDTO(
                         code=ValidationErrorCode.UNREACHABLE_NODES,
-                        message=f"Nodes not reachable from trigger",
+                        message="Nodes not reachable from trigger",
                         node_ids=list(unreachable),
                         details={
                             "unreachable_node_ids": [str(n) for n in unreachable],
@@ -597,7 +611,8 @@ class DAGValidator:
         dead_ends = GraphAlgorithms.find_dead_ends(graph, terminal_types)
         # Filter out terminal nodes and trigger nodes
         non_terminal_dead_ends = [
-            node_id for node_id in dead_ends
+            node_id
+            for node_id in dead_ends
             if node_id not in {n.id for n in nodes if n.node_type in terminal_types}
         ]
         if non_terminal_dead_ends:
@@ -607,7 +622,7 @@ class DAGValidator:
                     warnings.append(
                         ValidationWarning(
                             code="DEAD_END_NODE",
-                            message=f"Node has no outgoing edges",
+                            message="Node has no outgoing edges",
                             node_id=node_id,
                             suggestion="Add outgoing edge or mark as terminal",
                         )
@@ -662,7 +677,7 @@ class DAGValidator:
                 errors.append(
                     ValidationErrorDTO(
                         code=ValidationErrorCode.UNDEFINED_VARIABLE,
-                        message=f"Undefined variables referenced in node",
+                        message="Undefined variables referenced in node",
                         node_ids=[node.id],
                         details={
                             "node_id": str(node.id),
@@ -679,11 +694,13 @@ class DAGValidator:
 
             if source and target:
                 if source.output_schema and target.input_schema:
-                    if not self._schemas_compatible(source.output_schema, target.input_schema):
+                    if not self._schemas_compatible(
+                        source.output_schema, target.input_schema
+                    ):
                         errors.append(
                             ValidationErrorDTO(
                                 code=ValidationErrorCode.SCHEMA_MISMATCH,
-                                message=f"Output schema incompatible with input schema",
+                                message="Output schema incompatible with input schema",
                                 node_ids=[source.id, target.id],
                                 edge_ids=[edge.id],
                                 details={
@@ -695,7 +712,7 @@ class DAGValidator:
                             )
                         )
 
-    def _generate_topology(self, graph: Graph) -> TopologyResult:
+    def _generate_topology(self, graph: _Graph) -> TopologyResult:
         """Generate topology analysis from graph."""
         levels_data = GraphAlgorithms.topological_sort_levels(graph)
         if levels_data is None:
