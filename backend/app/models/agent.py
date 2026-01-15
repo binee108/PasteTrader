@@ -109,12 +109,23 @@ class Agent(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     )
 
     # Status flags
+    # Note: is_active is inherited from SoftDeleteMixin
     is_public: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         default=False,
         server_default="false",
     )
+
+    @property
+    def model_provider(self) -> str | None:
+        """Get the model provider from model_config."""
+        return self.model_config.get("provider") if self.model_config else None
+
+    @property
+    def model_name(self) -> str | None:
+        """Get the model name from model_config."""
+        return self.model_config.get("model") if self.model_config else None
 
     # Relationships
     owner: Mapped[User] = relationship(

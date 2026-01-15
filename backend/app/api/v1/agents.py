@@ -105,8 +105,8 @@ async def list_agents(
             AgentListResponse(
                 id=agent.id,
                 name=agent.name,
-                model_provider=agent.model_provider,
-                model_name=agent.model_name,
+                model_provider=agent.model_provider or "unknown",
+                model_name=agent.model_name or "unknown",
                 is_active=agent.is_active,
                 is_public=agent.is_public,
                 created_at=agent.created_at.isoformat(),

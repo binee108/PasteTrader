@@ -15,7 +15,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
-from sqlalchemy.orm import attributes
 
 from app.core.exceptions import ResourceInUseError
 from app.models.agent import Agent
@@ -158,7 +157,9 @@ class AgentService:
         query = select(Agent).where(Agent.owner_id == owner_id)
 
         if model_provider is not None:
-            query = query.where(Agent.model_provider == model_provider)
+            query = query.where(
+                Agent.model_config["provider"].astext == model_provider
+            )
 
         if is_active is not None:
             query = query.where(Agent.is_active == is_active)
@@ -197,7 +198,9 @@ class AgentService:
         query = select(func.count()).where(Agent.owner_id == owner_id)
 
         if model_provider is not None:
-            query = query.where(Agent.model_provider == model_provider)
+            query = query.where(
+                Agent.model_config["provider"].astext == model_provider
+            )
 
         if is_active is not None:
             query = query.where(Agent.is_active == is_active)
@@ -324,21 +327,21 @@ class AgentService:
         if agent is None:
             raise AgentNotFoundError(f"Agent {agent_id} not found")
 
-        tool_id_str = str(tool_id)
-
         # Check if tool is already associated
-        if tool_id_str in agent.tools:
+        existing_tool_ids = {str(t.id) for t in agent.tools}
+        if str(tool_id) in existing_tool_ids:
             raise ToolAlreadyAssociatedError(
                 f"Tool {tool_id} already associated with agent {agent_id}"
             )
 
+        # Get the tool from database
+        tool = await self.db.get(Tool, tool_id)
+        if tool is None:
+            raise ToolNotFoundError(f"Tool {tool_id} not found")
 
         # Add tool to agent
-        agent.tools.append(tool_id_str)
+        agent.tools.append(tool)
         agent.updated_at = datetime.now(UTC)
-
-        # Flag the tools field as modified for SQLAlchemy
-        attributes.flag_modified(agent, "tools")
 
         await self.db.flush()
         await self.db.refresh(agent)
@@ -362,11 +365,12 @@ class AgentService:
             raise AgentNotFoundError(f"Agent {agent_id} not found")
 
         tool_id_str = str(tool_id)
-        if tool_id_str in agent.tools:
-            agent.tools.remove(tool_id_str)
+        tool_to_remove = next(
+            (t for t in agent.tools if str(t.id) == tool_id_str), None
+        )
+        if tool_to_remove:
+            agent.tools.remove(tool_to_remove)
             agent.updated_at = datetime.now(UTC)
-            # Flag the tools field as modified for SQLAlchemy
-            attributes.flag_modified(agent, "tools")
 
         await self.db.flush()
         await self.db.refresh(agent)
@@ -396,10 +400,12 @@ class AgentService:
         updated_agent_ids = []
 
         for agent in agents:
-            if tool_id_str in agent.tools:
-                agent.tools.remove(tool_id_str)
+            tool_to_remove = next(
+                (t for t in agent.tools if str(t.id) == tool_id_str), None
+            )
+            if tool_to_remove:
+                agent.tools.remove(tool_to_remove)
                 agent.updated_at = datetime.now(UTC)
-                attributes.flag_modified(agent, "tools")
                 updated_agent_ids.append(str(agent.id))
 
         if updated_agent_ids:
@@ -410,7 +416,7 @@ class AgentService:
     async def validate_tool_references(self, agent_id: UUID) -> dict[str, Any]:
         """Validate that all tools referenced by an agent exist and are active.
 
-        This method checks each tool ID in the agent's tools array and returns
+        This method checks each tool in the agent's tools relationship and returns
         a report of any invalid or inactive tool references.
 
         Args:
@@ -419,7 +425,7 @@ class AgentService:
         Returns:
             Dictionary with validation results:
                 - valid: List of valid tool IDs
-                - missing: List of tool IDs that don't exist
+                - missing: List of tool IDs that don't exist (always empty for relationships)
                 - inactive: List of tool IDs that exist but are not active
                 - deleted: List of tool IDs that have been soft-deleted
 
@@ -438,49 +444,25 @@ class AgentService:
                 "deleted": [],
             }
 
-        # Query all tools at once
-        tool_ids = [UUID(tool_id_str) for tool_id_str in agent.tools]
-        tool_query = select(Tool).where(Tool.id.in_(tool_ids))
-        tool_result = await self.db.execute(tool_query)
-        existing_tools = tool_result.scalars().all()
+        # Categorize tools by their status
+        valid_tools: list[str] = []
+        inactive_tools: list[str] = []
+        deleted_tools: list[str] = []
 
-        # Categorize tool IDs
-        existing_tool_ids = {str(tool.id) for tool in existing_tools}
-        valid_tools = []
-        inactive_tools = []
-        missing_tools = []
-
-        for tool_id_str in agent.tools:
-            if tool_id_str not in existing_tool_ids:
-                # Tool doesn't exist - check if it was deleted
-                deleted_query = select(Tool).where(
-                    Tool.id == UUID(tool_id_str),
-                    Tool.deleted_at.isnot(None)
-                )
-                deleted_result = await self.db.execute(deleted_query)
-                deleted_tool = deleted_result.scalar_one_or_none()
-
-                if deleted_tool:
-                    # Soft-deleted tools are tracked separately
-                    pass
-                else:
-                    # Tool ID doesn't exist at all
-                    missing_tools.append(tool_id_str)
+        for tool in agent.tools:
+            tool_id_str = str(tool.id)
+            if tool.deleted_at is not None:
+                deleted_tools.append(tool_id_str)
+            elif not tool.is_active:
+                inactive_tools.append(tool_id_str)
             else:
-                # Tool exists, check if active
-                for tool in existing_tools:
-                    if str(tool.id) == tool_id_str:
-                        if tool.is_active:
-                            valid_tools.append(tool_id_str)
-                        else:
-                            inactive_tools.append(tool_id_str)
-                        break
+                valid_tools.append(tool_id_str)
 
         return {
             "valid": valid_tools,
-            "missing": missing_tools,
+            "missing": [],  # Relationship ensures tools exist
             "inactive": inactive_tools,
-            "deleted": [],  # Soft-deleted tools not tracked separately
+            "deleted": deleted_tools,
         }
 
     async def test_execute(self, agent_id: UUID, input_data: dict[str, Any]) -> dict[str, Any]:
