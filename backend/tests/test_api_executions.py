@@ -12,7 +12,6 @@ from uuid import uuid4
 import pytest
 from fastapi import status
 from httpx import AsyncClient
-from unittest.mock import MagicMock, AsyncMock, patch
 
 # =============================================================================
 # WorkflowExecution Endpoint Tests

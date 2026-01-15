@@ -15,7 +15,7 @@ from uuid import UUID, uuid4
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
-from sqlalchemy import event, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.main import app
@@ -31,7 +31,6 @@ from app.models.enums import (
 from app.models.execution import ExecutionLog, NodeExecution, WorkflowExecution
 from app.models.tool import Tool
 from app.models.workflow import Edge, Node, Workflow
-
 
 # =============================================================================
 # PYTEST CONFIGURATION TESTS
@@ -1039,4 +1038,4 @@ class TestLegacyFixtures:
 
 
 # Import for SQL queries
-from sqlalchemy import select, text
+from sqlalchemy import text

@@ -6,12 +6,12 @@ REQ: REQ-002 - Tool Test Execution Tests
 REQ: REQ-003 - Tool Filtering Tests
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from fastapi import status
 from httpx import AsyncClient
-from unittest.mock import MagicMock, AsyncMock, patch
 
 # =============================================================================
 # Tool Endpoint Tests

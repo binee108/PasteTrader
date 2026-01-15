@@ -9,14 +9,12 @@ Comprehensive tests for ToolService covering all CRUD operations,
 error cases, and edge cases to achieve 80%+ code coverage.
 """
 
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
 
 from app.models.enums import ToolType
-from app.models.tool import Tool
 from app.schemas.tool import ToolCreate, ToolUpdate
 from app.services.tool_service import (
     ToolExecutionError,
@@ -24,7 +22,6 @@ from app.services.tool_service import (
     ToolService,
     ToolServiceError,
 )
-
 
 # =============================================================================
 # Test Fixtures
@@ -386,7 +383,7 @@ class TestToolServiceList:
         tool1 = await service.create(
             sample_owner_id, tool_create_factory(name="Tool 1")
         )
-        tool2 = await service.create(
+        await service.create(
             sample_owner_id, tool_create_factory(name="Tool 2")
         )
 
@@ -570,7 +567,7 @@ class TestToolServiceCount:
         tool1 = await service.create(
             sample_owner_id, tool_create_factory(name="Tool 1")
         )
-        tool2 = await service.create(
+        await service.create(
             sample_owner_id, tool_create_factory(name="Tool 2")
         )
 

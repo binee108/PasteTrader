@@ -1136,15 +1136,15 @@ class TestEdgeService:
         # Create diamond pattern: A->B, A->C, B->D, C->D
         # When adding C->D, DFS from D should visit D (already in visited from B path)
         # This tests the "if node in visited: return False" branch
-        edge1 = await EdgeService(db_session).create(
+        await EdgeService(db_session).create(
             workflow.id,
             EdgeCreate(source_node_id=node_a.id, target_node_id=node_b.id),
         )
-        edge2 = await EdgeService(db_session).create(
+        await EdgeService(db_session).create(
             workflow.id,
             EdgeCreate(source_node_id=node_a.id, target_node_id=node_c.id),
         )
-        edge3 = await EdgeService(db_session).create(
+        await EdgeService(db_session).create(
             workflow.id,
             EdgeCreate(source_node_id=node_b.id, target_node_id=node_d.id),
         )

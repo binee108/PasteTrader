@@ -7,7 +7,7 @@ REQ: REQ-003 - Agent Filtering and Search Tests
 """
 
 from datetime import UTC, datetime
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +21,6 @@ from app.services.agent_service import (
     AgentServiceError,
     ToolAlreadyAssociatedError,
 )
-
 
 # =============================================================================
 # TEST FIXTURES
@@ -473,7 +472,7 @@ class TestAgentServiceCount:
         owner_id = uuid4()
 
         # Create 5 agents
-        for i in range(5):
+        for _i in range(5):
             agent = agent_factory(owner_id=owner_id)
             db_session.add(agent)
         await db_session.flush()
