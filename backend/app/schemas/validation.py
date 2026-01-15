@@ -11,13 +11,15 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import ConfigDict, Field
 
 from app.schemas.base import BaseSchema
 
+if TYPE_CHECKING:
+    pass
 
 # =============================================================================
 # Validation Enums
@@ -472,23 +474,23 @@ class ValidationResponse(BaseSchema):
 
 
 __all__ = [
-    # Enums
-    "ValidationLevel",
-    "ValidationErrorCode",
-    # Request schemas
-    "ValidationRequest",
-    "ValidationOptions",
-    "EdgeValidationRequest",
     "BatchValidationRequest",
-    # Result schemas
-    "ValidationError",
-    "ValidationWarning",
-    "TopologyLevel",
-    "TopologyResult",
     "CycleCheckResult",
-    "ValidationResult",
-    "ValidationResponse",
+    "EdgeGraphInfo",
+    "EdgeValidationRequest",
     # Internal schemas
     "NodeGraphInfo",
-    "EdgeGraphInfo",
+    "TopologyLevel",
+    "TopologyResult",
+    # Result schemas
+    "ValidationError",
+    "ValidationErrorCode",
+    # Enums
+    "ValidationLevel",
+    "ValidationOptions",
+    # Request schemas
+    "ValidationRequest",
+    "ValidationResponse",
+    "ValidationResult",
+    "ValidationWarning",
 ]

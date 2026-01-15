@@ -9,20 +9,22 @@ Supports real-time validation, topology analysis, and cycle checking.
 
 from __future__ import annotations
 
-from typing import Annotated
-from uuid import UUID
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.api.deps import DBSession
 from app.schemas.validation import (
     CycleCheckResult,
-    EdgeValidationRequest,
     TopologyResult,
     ValidationOptions,
     ValidationResult,
 )
 from app.services.workflow import DAGValidator
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from app.api.deps import DBSession
 
 router = APIRouter(prefix="/validation", tags=["validation"])
 
@@ -45,8 +47,8 @@ router = APIRouter(prefix="/validation", tags=["validation"])
 )
 async def validate_workflow(
     workflow_id: UUID,
+    db: DBSession,
     options: ValidationOptions | None = None,
-    db: DBSession = None,
 ) -> ValidationResult:
     """Validate entire workflow graph.
 
@@ -69,11 +71,10 @@ async def validate_workflow(
     validator = DAGValidator(db)
 
     try:
-        result = await validator.validate_workflow(
+        return await validator.validate_workflow(
             workflow_id=workflow_id,
             options=options or ValidationOptions(),
         )
-        return result
     except Exception as e:
         if "not found" in str(e).lower():
             raise HTTPException(
@@ -99,6 +100,7 @@ async def validate_workflow(
 )
 async def check_edge(
     workflow_id: UUID,
+    db: DBSession,
     source_node_id: Annotated[
         UUID,
         Query(description="Source node ID for the proposed edge"),
@@ -115,7 +117,6 @@ async def check_edge(
         str | None,
         Query(description="Optional target handle"),
     ] = None,
-    db: DBSession = None,
 ) -> CycleCheckResult:
     """Quick cycle check for proposed edge.
 
@@ -147,7 +148,9 @@ async def check_edge(
         )
         return CycleCheckResult(
             has_cycle=not result.is_valid,
-            cycle_path=result.errors[0].details.get("cycle_path") if result.errors else None,
+            cycle_path=result.errors[0].details.get("cycle_path")
+            if result.errors
+            else None,
             cycle_description=result.errors[0].message if result.errors else None,
         )
     except Exception as e:
@@ -176,7 +179,7 @@ async def check_edge(
 )
 async def get_topology(
     workflow_id: UUID,
-    db: DBSession = None,
+    db: DBSession,
 ) -> TopologyResult:
     """Get execution topology for workflow.
 
@@ -198,8 +201,7 @@ async def get_topology(
     validator = DAGValidator(db)
 
     try:
-        result = await validator.get_topology(workflow_id)
-        return result
+        return await validator.get_topology(workflow_id)
     except Exception as e:
         error_msg = str(e).lower()
         if "cycle" in error_msg:
@@ -231,7 +233,7 @@ async def get_topology(
 )
 async def check_cycle(
     workflow_id: UUID,
-    db: DBSession = None,
+    db: DBSession,
 ) -> CycleCheckResult:
     """Check workflow for cycles.
 
@@ -250,8 +252,7 @@ async def check_cycle(
     validator = DAGValidator(db)
 
     try:
-        result = await validator.check_cycle(workflow_id)
-        return result
+        return await validator.check_cycle(workflow_id)
     except Exception as e:
         if "not found" in str(e).lower():
             raise HTTPException(
