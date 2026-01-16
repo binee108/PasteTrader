@@ -23,7 +23,7 @@ PasteTrader는 AI 기반 트레이딩 워크플로우 자동화 플랫폼입니�
 | 1 | Workflow Core Models | M-L | Week 1 | ✅ Implemented |
 | 2 | Execution Models | M | Week 2 | ✅ Implemented |
 | 3 | API Layer | M-L | Week 2 | ✅ Implemented |
-| 4 | Workflow Engine | XL | Week 3-4 | 🔲 Pending |
+| 4 | Workflow Engine | XL | Week 3-4 | 🚧 In Progress (SPEC-010 Complete) |
 | 5 | LLM Integration | L | Week 5 | 🔲 Pending |
 | 6 | Content Parsing | M | Week 8 | 🔲 Pending |
 | 7 | Frontend UI | XL | Week 6-7 | 🔲 Pending |
@@ -220,7 +220,7 @@ Agent API (7 endpoints):
 
 ---
 
-### Phase 4: Workflow Engine ⭐ Critical Path
+### Phase 4: Workflow Engine ⭐ Critical Path 🚧 In Progress
 
 **Objective**: DAG 기반 워크플로우 실행 엔진 구현
 
@@ -248,13 +248,21 @@ class NodeProcessor(ABC):
 
 **Dependencies**: Phase 3
 
-**Deliverables**:
-- [ ] DAG cycle detection
-- [ ] Topological sort execution
+**Completed** (SPEC-010):
+- [x] DAG cycle detection (DFS algorithm with path tracking)
+- [x] Topological sort execution (Kahn's algorithm)
+- [x] Validation schemas (`backend/app/schemas/validation.py`, 495 lines)
+- [x] Validation API endpoints (4 endpoints)
+- [x] Error handling & custom exceptions
+- [x] Graph algorithms module (`backend/app/services/workflow/algorithms.py`, 491 lines)
+- [x] Comprehensive test coverage (1217 tests, 85.86%)
+
+**Remaining** (SPEC-011, SPEC-012):
+- [ ] DAG Executor implementation
 - [ ] 6 node type processors
 - [ ] Async parallel execution
-- [ ] Error handling & retry logic
 - [ ] Execution context management
+- [ ] Retry logic
 
 ---
 
@@ -450,8 +458,8 @@ Phase 2 ────────────────┘      Phase 7 <──
 | SPEC-006 | 2 | Schedule Configuration Model | P1 | ✅ |
 | SPEC-007 | 3 | Workflow API Endpoints | P0 | ✅ Complete (89.41% coverage) |
 | SPEC-008 | 3/8 | Execution API Endpoints & APScheduler Integration | P0 | 🚧 Partial (API done, Scheduler pending) |
-| SPEC-009 | 3 | Tool/Agent API Endpoints | P1 | ✅ |
-| SPEC-010 | 4 | DAG Validation Service | P0 | 🔲 |
+| SPEC-009 | 3 | Tool/Agent API Endpoints | P1 | ✅ Complete (v1.2.0) |
+| SPEC-010 | 4 | DAG Validation Service | P0 | ✅ Complete (1217 tests, 85.86% coverage) |
 | SPEC-011 | 4 | Workflow Execution Engine | P0 | 🔲 |
 | SPEC-012 | 4 | Node Processor Framework | P0 | 🔲 |
 | SPEC-013 | 5 | LLM Provider Abstraction | P0 | 🔲 |
@@ -532,7 +540,7 @@ schedules             - APScheduler 작업
 
 ## Next Steps
 
-### Current Status (2026-01-14)
+### Current Status (2026-01-16)
 
 **Completed**:
 - ✅ Phase 0: Database Foundation (SPEC-001, SPEC-002)
@@ -590,15 +598,34 @@ schedules             - APScheduler 작업
     - 편의 엔드포인트: POST /workflows/{id}/execute
   - Execution API 구현 (SPEC-008)
     - 12개 엔드포인트 (실행 관리 + 상세 로그)
-  - Tool API 구현 (SPEC-009)
+  - Tool API 구현 (SPEC-009 v1.2.0)
     - 6개 엔드포인트 (Tool CRUD + Test)
-  - Agent API 구현 (SPEC-009)
+    - 필드명 통일 (parameters→input_schema, tool_ids→tools)
+    - model_config 평탄화 (model_provider, model_name)
+  - Agent API 구현 (SPEC-009 v1.2.0)
     - 7개 엔드포인트 (Agent CRUD + Tool 연결)
   - **총 45개 REST API 엔드포인트 구현**
   - 테스트 커버리지 89.41% 달성 (938 tests passed)
   - TRUST 5 퀄리티 게이트 통과 (SPEC-007)
 
 **Partially Complete**:
+- 🚧 Phase 4: Workflow Engine (SPEC-010 Complete, SPEC-011/012 Pending)
+  - ✅ SPEC-010: DAG Validation Service (Complete)
+    - DAG Validator (814 lines)
+    - Graph Algorithms (491 lines)
+    - Validation Schemas (495 lines)
+    - Validation API Endpoints (268 lines, 4 endpoints)
+    - Test Coverage: 1217 tests, 85.86%
+    - 19 requirements implemented (REQ-010-001 through REQ-010-019)
+  - 🔲 SPEC-011: Workflow Execution Engine
+  - 🔲 SPEC-012: Node Processor Framework
+  - **필요한 작업**:
+    - DAG Executor implementation
+    - 6 node type processors
+    - Async parallel execution
+    - Execution context management
+    - Retry logic
+
 - 🚧 Phase 8: Scheduler Integration
   - Schedule 모델 구현 완료 (SPEC-006)
   - Schedule 테스트 완료
@@ -611,43 +638,43 @@ schedules             - APScheduler 작업
 
 **Recommended Priority Order**:
 
-1. **Phase 4: Workflow Engine** ⭐ **CRITICAL PATH**
-   - SPEC-010: DAG Validation Service
-   - SPEC-011: Workflow Execution Engine
-   - SPEC-012: Node Processor Framework
+1. **Phase 4: Workflow Engine** ⭐ **CRITICAL PATH** (CONTINUE)
+   - ✅ SPEC-010: DAG Validation Service (Complete)
+   - 🔲 SPEC-011: Workflow Execution Engine
+   - 🔲 SPEC-012: Node Processor Framework
    - This is the core functionality that enables actual workflow execution
 
-2. **Phase 8: Scheduler Integration** (완료)
-   - APScheduler 서비스 구현
-   - Schedule API 엔드포인트
-   - Schedule 관리 UI
-
-3. **Phase 5: LLM Integration**
+2. **Phase 5: LLM Integration**
    - SPEC-013: LLM Provider Abstraction
    - SPEC-014: Anthropic Provider
    - SPEC-017: Agent Node Integration
 
+3. **Phase 8: Scheduler Integration** (완료)
+   - APScheduler 서비스 구현
+   - Schedule API 엔드포인트
+   - Schedule 관리 UI
+
 ### Commands for Next Session
 
 ```bash
-# Phase 4 시작 (Workflow Engine - CRITICAL PATH)
-/moai:1-plan "DAG Validation Service for Workflow Engine"
+# Phase 4 계속 (Workflow Engine - CRITICAL PATH)
+/moai:1-plan "Workflow Execution Engine with Node Processors"
 ```
 
 ### Recommended Sequence
 
 1. **Week 3-4**: Phase 4 (Workflow Engine) ⭐ **CRITICAL PATH**
-   - DAG Validator
-   - Workflow Executor
-   - Node Processors (6 types)
+   - ✅ DAG Validator (SPEC-010 - Complete)
+   - 🔲 Workflow Executor (SPEC-011)
+   - 🔲 Node Processors (SPEC-012, 6 types)
 
-2. **Week 4**: Phase 8 (Scheduler Integration 완료)
+2. **Week 5**: Phase 5 (LLM Integration)
+   - LLM Provider Abstraction (SPEC-013)
+   - Anthropic/OpenAI/Z.AI Providers (SPEC-014/015/016)
+
+3. **Week 6**: Phase 8 (Scheduler Integration 완료)
    - APScheduler 서비스
    - Schedule API
-
-3. **Week 5**: Phase 5 (LLM Integration)
-   - LLM Provider Abstraction
-   - Anthropic/OpenAI/Z.AI Providers
 
 ---
 
