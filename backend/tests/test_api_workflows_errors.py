@@ -13,8 +13,117 @@ in the workflow API, including all exception branches and edge cases.
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from fastapi import status
 from httpx import AsyncClient
+
+# =============================================================================
+# Module-Level Async Fixtures
+# =============================================================================
+
+
+@pytest_asyncio.fixture
+async def workflow_id(async_client: AsyncClient, sample_workflow_data) -> str:
+    """Create a workflow and return its ID for error tests."""
+    response = await async_client.post(
+        "/api/v1/workflows/", json=sample_workflow_data
+    )
+    return response.json()["id"]
+
+
+@pytest_asyncio.fixture
+async def node_id(
+    async_client: AsyncClient, sample_workflow_data, sample_node_data
+) -> str:
+    """Create a node and return its ID for error tests."""
+    # Create workflow
+    workflow_response = await async_client.post(
+        "/api/v1/workflows/", json=sample_workflow_data
+    )
+    workflow_id = workflow_response.json()["id"]
+
+    # Create node
+    response = await async_client.post(
+        f"/api/v1/workflows/{workflow_id}/nodes", json=sample_node_data
+    )
+    return response.json()["id"]
+
+
+@pytest_asyncio.fixture
+async def workflow_with_nodes(
+    async_client: AsyncClient, sample_workflow_data
+) -> tuple:
+    """Create a workflow with nodes for error tests."""
+    # Create workflow
+    workflow_response = await async_client.post(
+        "/api/v1/workflows/", json=sample_workflow_data
+    )
+    workflow_id = workflow_response.json()["id"]
+
+    # Create trigger nodes (don't require tool_id)
+    node_data = {
+        "name": "Test Node",
+        "node_type": "trigger",
+        "position_x": 100.0,
+        "position_y": 200.0,
+    }
+
+    node1_response = await async_client.post(
+        f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
+    )
+    node1_id = node1_response.json()["id"]
+
+    node2_response = await async_client.post(
+        f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
+    )
+    node2_id = node2_response.json()["id"]
+
+    return workflow_id, node1_id, node2_id
+
+
+@pytest_asyncio.fixture
+async def edge_id(
+    async_client: AsyncClient, sample_workflow_data
+) -> tuple:
+    """Create an edge for error tests."""
+    # Create workflow with nodes
+    workflow_response = await async_client.post(
+        "/api/v1/workflows/", json=sample_workflow_data
+    )
+    workflow_id = workflow_response.json()["id"]
+
+    node_data = {
+        "name": "Test Node",
+        "node_type": "trigger",
+        "position_x": 100.0,
+        "position_y": 200.0,
+    }
+
+    node1_response = await async_client.post(
+        f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
+    )
+    node1_id = node1_response.json()["id"]
+
+    node2_response = await async_client.post(
+        f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
+    )
+    node2_id = node2_response.json()["id"]
+
+    # Create edge
+    edge_data = {
+        "source_node_id": node1_id,
+        "target_node_id": node2_id,
+        "source_handle": "output",
+        "target_handle": "input",
+    }
+
+    edge_response = await async_client.post(
+        f"/api/v1/workflows/{workflow_id}/edges", json=edge_data
+    )
+    edge_id = edge_response.json()["id"]
+
+    return workflow_id, edge_id, node1_id, node2_id
+
 
 # =============================================================================
 # Category 1: Workflow CRUD Error Handling Tests
@@ -63,24 +172,6 @@ class TestWorkflowCRUDErrors:
 
 class TestNodeErrors:
     """Test suite for node error handling."""
-
-    @pytest.fixture
-    async def workflow_id(self, async_client: AsyncClient, sample_workflow_data):
-        """Create a workflow and return its ID."""
-        response = await async_client.post(
-            "/api/v1/workflows/", json=sample_workflow_data
-        )
-        return response.json()["id"]
-
-    @pytest.fixture
-    async def node_id(
-        self, async_client: AsyncClient, workflow_id: str, sample_node_data
-    ):
-        """Create a node and return its ID."""
-        response = await async_client.post(
-            f"/api/v1/workflows/{workflow_id}/nodes", json=sample_node_data
-        )
-        return response.json()["id"]
 
     @pytest.mark.asyncio
     async def test_list_nodes_workflow_not_found(self, async_client: AsyncClient):
@@ -240,56 +331,6 @@ class TestNodeErrors:
 
 class TestEdgeErrors:
     """Test suite for edge error handling."""
-
-    @pytest.fixture
-    async def workflow_with_nodes(
-        self, async_client: AsyncClient, sample_workflow_data
-    ):
-        """Create a workflow with nodes and return IDs."""
-        # Create workflow
-        workflow_response = await async_client.post(
-            "/api/v1/workflows/", json=sample_workflow_data
-        )
-        workflow_id = workflow_response.json()["id"]
-
-        # Create trigger nodes (no tool_id required)
-        node_data = {
-            "name": "Test Node",
-            "node_type": "trigger",
-            "position_x": 100.0,
-            "position_y": 200.0,
-        }
-
-        node1_response = await async_client.post(
-            f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
-        )
-        node1_id = node1_response.json()["id"]
-
-        node2_response = await async_client.post(
-            f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
-        )
-        node2_id = node2_response.json()["id"]
-
-        return workflow_id, node1_id, node2_id
-
-    @pytest.fixture
-    async def edge_id(
-        self,
-        async_client: AsyncClient,
-        workflow_with_nodes: tuple,
-    ):
-        """Create an edge and return its ID."""
-        workflow_id, node1_id, node2_id = workflow_with_nodes
-
-        edge_data = {
-            "source_node_id": str(node1_id),
-            "target_node_id": str(node2_id),
-        }
-
-        response = await async_client.post(
-            f"/api/v1/workflows/{workflow_id}/edges", json=edge_data
-        )
-        return response.json()["id"]
 
     @pytest.mark.asyncio
     async def test_list_edges_workflow_not_found(self, async_client: AsyncClient):
@@ -485,11 +526,12 @@ class TestEdgeErrors:
 
     @pytest.mark.asyncio
     async def test_delete_edge_wrong_workflow(
-        self, async_client: AsyncClient, edge_id: str
+        self, async_client: AsyncClient, edge_id: tuple
     ):
         """Test delete edge from different workflow returns 404."""
+        _, edge_id_str, _, _ = edge_id
         response = await async_client.delete(
-            f"/api/v1/workflows/{uuid4()}/edges/{edge_id}"
+            f"/api/v1/workflows/{uuid4()}/edges/{edge_id_str}"
         )
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
@@ -502,14 +544,6 @@ class TestEdgeErrors:
 
 class TestGraphUpdateErrors:
     """Test suite for graph update error handling."""
-
-    @pytest.fixture
-    async def workflow_id(self, async_client: AsyncClient, sample_workflow_data):
-        """Create a workflow and return its ID."""
-        response = await async_client.post(
-            "/api/v1/workflows/", json=sample_workflow_data
-        )
-        return response.json()["id"]
 
     @pytest.mark.asyncio
     async def test_update_graph_workflow_not_found(self, async_client: AsyncClient):

@@ -27,16 +27,8 @@ from __future__ import annotations
 import re
 from time import perf_counter
 
-# Fix compatibility between passlib 1.7.4 and bcrypt 4.x
-# bcrypt 4.x removed __about__ attribute, add a workaround
 import bcrypt
 
-if not hasattr(bcrypt, "__about__"):
-    class _About:
-        __version__ = getattr(bcrypt, "__version__", "4.1.3")
-    bcrypt.__about__ = _About()  # type: ignore[attr-defined]
-
-from passlib.context import CryptContext  # type: ignore[import-untyped]
 
 
 class PasswordComplexityError(ValueError):

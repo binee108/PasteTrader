@@ -11,7 +11,7 @@ This module defines base schemas and common patterns used across the API.
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003 - Required at runtime for Pydantic
-from typing import Any, TypeVar
+from typing import Any, Generic, TypeVar
 from uuid import UUID  # noqa: TC003 - Required at runtime for Pydantic
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -22,7 +22,7 @@ T = TypeVar("T")
 # Common field definitions for reuse
 # Field() returns FieldInfo, but annotating as Any for flexible reuse
 ConfigField: Any = Field(
-    default_factory=dict,
+    default_factory=dict,  # type: ignore[arg-type]
     description="Configuration object (JSON)",
     examples=[{"timeout": 300, "retry": True}],
 )
@@ -88,7 +88,7 @@ class PaginationParams(BaseSchema):
         return (self.page - 1) * self.size
 
 
-class PaginatedResponse[T](BaseSchema):
+class PaginatedResponse(BaseSchema, Generic[T]):
     """Generic paginated response wrapper.
 
     Provides consistent pagination metadata for all list endpoints.

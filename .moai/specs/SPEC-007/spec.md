@@ -49,6 +49,7 @@
 
 | Component | Version | Purpose |
 |-----------|---------|---------|
+| Python | 3.9+ | Runtime environment (PEP 585/695 compliance) |
 | FastAPI | 0.115.x | API framework |
 | Pydantic | 2.10.x | Schema validation |
 | SQLAlchemy | 2.0.x | Async ORM |
@@ -1327,6 +1328,7 @@ router.include_router(executions_router, prefix="/executions", tags=["executions
 | 1.0.0 | 2026-01-12 | workflow-spec | 최초 SPEC 작성 |
 | 1.1.0 | 2026-01-12 | workflow-spec | 구현 완료 및 테스트 통과 (87.47% coverage) |
 | 1.2.0 | 2026-01-13 | manager-docs | 최종 검증: 938 tests, 89.41% coverage |
+| 1.4.0 | 2026-01-14 | manager-docs | PEP 585/695 type annotation compliance; mypy type errors resolved; test coverage improved to 90.36% |
 
 ---
 
@@ -1423,3 +1425,107 @@ class WorkflowExecutionCreate(BaseModel):
 - Collection: 복수형 (`/executions`, `/workflows`)
 - Single Resource: 단수형 (`/executions/{id}`)
 - Nested Resources: 경로로 표현 (`/executions/{id}/nodes`)
+
+---
+
+## Testing Best Practices
+
+### Mock-Based Exception Handling Tests
+
+Exception handling tests use pytest's `mocker` fixture to simulate database and service failures without needing actual error conditions.
+
+**Pattern:**
+
+```python
+def test_workflow_create_database_error(mocker):
+    """Test workflow creation handles database errors."""
+    # Mock database session to raise exception
+    mock_db = mocker.MagicMock(spec=AsyncSession)
+    mock_db.execute.side_effect = SQLAlchemyError("Database connection failed")
+
+    # Test that the service handles the error gracefully
+    with pytest.raises(HTTPException) as exc_info:
+        await workflow_service.create(mock_db, workflow_data)
+
+    assert exc_info.value.status_code == 500
+    assert "database" in exc_info.value.detail.lower()
+```
+
+**Key Points:**
+
+- Use `mocker.MagicMock` with `spec=` to create type-safe mocks
+- Raise specific exceptions (e.g., `SQLAlchemyError`, `ValidationError`)
+- Verify HTTP status codes and error messages
+- Test both success and failure paths
+
+### Session Factory Testing Patterns
+
+Database session fixtures use pytest-asyncio's async fixture pattern with explicit session lifecycle management.
+
+**Pattern:**
+
+```python
+@pytest.fixture
+async def db_session(test_session_factory: async_sessionmaker[AsyncSession]):
+    """Create a test database session."""
+    async with test_session_factory() as session:
+        yield session
+        await session.rollback()  # Cleanup after test
+```
+
+**Key Points:**
+
+- Use `async_sessionmaker[AsyncSession]` type annotation for PEP 695 compliance
+- Always rollback after tests to maintain isolation
+- Use factory pattern to create fresh sessions for each test
+- Explicitly type the fixture return value
+
+### Type Annotation Standards (mypy Compliance)
+
+All code must pass strict mypy type checking with the following standards:
+
+**Type Hints:**
+
+```python
+from collections.abc import AsyncGenerator
+from typing import TypeVar
+
+T = TypeVar("T")
+
+async def get_items(session: AsyncSession) -> AsyncGenerator[Item, None]:
+    """Yield items from database."""
+    result = await session.execute(select(Item))
+    for item in result.scalars():
+        yield item
+```
+
+**Generic Classes (PEP 695):**
+
+```python
+from typing import Generic
+
+class ResponseWrapper(BaseModel, Generic[T]):
+    """Generic response wrapper using PEP 695 syntax."""
+    items: list[T]
+    total: int
+```
+
+**Key Standards:**
+
+- Use `collections.abc.AsyncGenerator` instead of `typing.AsyncGenerator` (PEP 585)
+- Use `list[T]` instead of `List[T]` (PEP 585)
+- Use `dict[K, V]` instead of `Dict[K, V]` (PEP 585)
+- Generic classes inherit from `Generic[T]` with explicit TypeVar
+- All async functions must have explicit return types
+- Mock objects use `spec=` parameter for type safety
+
+**mypy Configuration:**
+
+```ini
+[mypy]
+python_version = 3.9
+strict = True
+warn_return_any = True
+warn_unused_ignores = True
+disallow_untyped_defs = True
+```

@@ -62,7 +62,7 @@ class Agent(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
         name: Display name of the agent (unique)
         description: Optional description of the agent's purpose
         system_prompt: System prompt for the agent (required)
-        model_config: JSONB configuration for model parameters
+        llm_config: JSONB configuration for model parameters
         tools: Many-to-many relationship with Tool
         is_active: Whether the agent is active and usable
         is_public: Whether the agent is publicly accessible
@@ -101,7 +101,8 @@ class Agent(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     )
 
     # Model configuration as JSONB (replaces separate model_provider/model_name fields)
-    model_config: Mapped[dict[str, Any]] = mapped_column(
+    # Note: Named llm_config to avoid conflict with Pydantic v2's reserved model_config
+    llm_config: Mapped[dict[str, Any]] = mapped_column(
         JSONType,
         nullable=False,
         default=dict,
@@ -109,20 +110,23 @@ class Agent(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
     )
 
     # Status flags
-    is_active: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=True,
-        server_default="true",
-        index=True,
-    )
-
+    # Note: is_active is inherited from SoftDeleteMixin
     is_public: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         default=False,
         server_default="false",
     )
+
+    @property
+    def model_provider(self) -> str | None:
+        """Get the model provider from llm_config."""
+        return self.llm_config.get("provider") if self.llm_config else None
+
+    @property
+    def model_name(self) -> str | None:
+        """Get the model name from llm_config."""
+        return self.llm_config.get("model") if self.llm_config else None
 
     # Relationships
     owner: Mapped[User] = relationship(
@@ -140,7 +144,7 @@ class Agent(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
 
     def __repr__(self) -> str:
         """Return string representation of the agent."""
-        provider = self.model_config.get("provider", "unknown")
+        provider = self.llm_config.get("provider", "unknown")
         return f"<Agent(id={self.id}, name='{self.name}', provider={provider})>"
 
 

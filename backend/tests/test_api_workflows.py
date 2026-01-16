@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+import pytest_asyncio
 from fastapi import status
 from httpx import AsyncClient
 
@@ -19,6 +20,68 @@ from app.services.workflow_service import (
     DAGValidationError,
     InvalidNodeReferenceError,
 )
+
+# =============================================================================
+# Module-Level Async Fixtures
+# =============================================================================
+
+
+@pytest_asyncio.fixture
+async def workflow_id(async_client: AsyncClient, sample_workflow_data) -> str:
+    """Create a workflow and return its ID."""
+    response = await async_client.post("/api/v1/workflows/", json=sample_workflow_data)
+    return response.json()["id"]
+
+
+@pytest_asyncio.fixture
+async def workflow_with_nodes(async_client: AsyncClient, sample_workflow_data) -> tuple:
+    """Create a workflow with nodes and return IDs."""
+    # Create workflow
+    workflow_response = await async_client.post(
+        "/api/v1/workflows/", json=sample_workflow_data
+    )
+    workflow_id = workflow_response.json()["id"]
+
+    # Create nodes (using trigger type which doesn't require tool_id)
+    node_data = {
+        "name": "Test Node",
+        "node_type": "trigger",
+        "position_x": 100.0,
+        "position_y": 200.0,
+    }
+
+    node1_response = await async_client.post(
+        f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
+    )
+    node1_id = node1_response.json()["id"]
+
+    node2_response = await async_client.post(
+        f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
+    )
+    node2_id = node2_response.json()["id"]
+
+    return workflow_id, node1_id, node2_id
+
+
+@pytest_asyncio.fixture
+async def active_workflow_id(async_client: AsyncClient) -> str:
+    """Create an active workflow and return its ID."""
+    response = await async_client.post(
+        "/api/v1/workflows/",
+        json={"name": "Active Workflow", "is_active": True},
+    )
+    return response.json()["id"]
+
+
+@pytest_asyncio.fixture
+async def inactive_workflow_id(async_client: AsyncClient) -> str:
+    """Create an inactive workflow and return its ID."""
+    response = await async_client.post(
+        "/api/v1/workflows/",
+        json={"name": "Inactive Workflow", "is_active": False},
+    )
+    return response.json()["id"]
+
 
 # =============================================================================
 # Workflow Endpoint Tests
@@ -241,14 +304,6 @@ class TestWorkflowEndpoints:
 class TestNodeEndpoints:
     """Test suite for node API endpoints."""
 
-    @pytest.fixture
-    async def workflow_id(self, async_client: AsyncClient, sample_workflow_data):
-        """Create a workflow and return its ID."""
-        response = await async_client.post(
-            "/api/v1/workflows/", json=sample_workflow_data
-        )
-        return response.json()["id"]
-
     @pytest.mark.asyncio
     async def test_create_node_success(
         self, async_client: AsyncClient, workflow_id: str, sample_node_data
@@ -375,37 +430,6 @@ class TestNodeEndpoints:
 
 class TestEdgeEndpoints:
     """Test suite for edge API endpoints."""
-
-    @pytest.fixture
-    async def workflow_with_nodes(
-        self, async_client: AsyncClient, sample_workflow_data
-    ):
-        """Create a workflow with nodes and return IDs."""
-        # Create workflow
-        workflow_response = await async_client.post(
-            "/api/v1/workflows/", json=sample_workflow_data
-        )
-        workflow_id = workflow_response.json()["id"]
-
-        # Create nodes (using trigger type which doesn't require tool_id)
-        node_data = {
-            "name": "Test Node",
-            "node_type": "trigger",
-            "position_x": 100.0,
-            "position_y": 200.0,
-        }
-
-        node1_response = await async_client.post(
-            f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
-        )
-        node1_id = node1_response.json()["id"]
-
-        node2_response = await async_client.post(
-            f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
-        )
-        node2_id = node2_response.json()["id"]
-
-        return workflow_id, node1_id, node2_id
 
     @pytest.mark.asyncio
     async def test_create_edge_success(
@@ -1887,24 +1911,6 @@ class TestWorkflowExecuteEndpoint:
     REQ: REQ-001 - Workflow Execute Endpoint Tests
     """
 
-    @pytest.fixture
-    async def active_workflow_id(self, async_client: AsyncClient):
-        """Create an active workflow and return its ID."""
-        response = await async_client.post(
-            "/api/v1/workflows/",
-            json={"name": "Active Workflow", "is_active": True},
-        )
-        return response.json()["id"]
-
-    @pytest.fixture
-    async def inactive_workflow_id(self, async_client: AsyncClient):
-        """Create an inactive workflow and return its ID."""
-        response = await async_client.post(
-            "/api/v1/workflows/",
-            json={"name": "Inactive Workflow", "is_active": False},
-        )
-        return response.json()["id"]
-
     @pytest.mark.asyncio
     async def test_execute_workflow_success(
         self, async_client: AsyncClient, active_workflow_id: str
@@ -2060,3 +2066,132 @@ class TestWorkflowExecuteEndpoint:
 
             assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
             assert "Failed to execute workflow" in response.json()["detail"]
+
+
+# =============================================================================
+# Additional Mock-Based Exception Handling Tests
+# =============================================================================
+
+
+class TestWorkflowAPIExceptionHandlingExtended:
+    """Additional mock-based tests for Workflow API exception handling.
+
+    These tests target missing coverage lines in workflows.py:
+    - list_workflows exception path (158-162)
+    - create_workflow WorkflowServiceError (195-199)
+    - get_workflow not found (227-236)
+    - update_workflow exception paths
+    - delete_workflow exception paths
+    """
+
+    @pytest.mark.asyncio
+    async def test_list_workflows_generic_exception(self, async_client: AsyncClient):
+        """Test list workflows returns 500 on unexpected exception.
+
+        Tests lines 158-162 in workflows.py where generic Exception
+        is caught and converted to HTTP 500.
+        """
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_service = MagicMock()
+        mock_service.list = AsyncMock(
+            side_effect=Exception("Database connection failed")
+        )
+        mock_service.count = AsyncMock(side_effect=Exception("Count query failed"))
+
+        with patch("app.api.v1.workflows.WorkflowService", return_value=mock_service):
+            response = await async_client.get("/api/v1/workflows/")
+
+            assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+            assert "Failed to list workflows" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_create_workflow_service_error(self, async_client: AsyncClient):
+        """Test create workflow returns 400 on WorkflowServiceError.
+
+        Tests lines 195-199 in workflows.py where WorkflowServiceError
+        is caught and converted to HTTP 400.
+        """
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from app.services.workflow_service import WorkflowServiceError
+
+        workflow_data = {
+            "name": "Test Workflow",
+            "description": "Test",
+            "is_active": True,
+        }
+
+        mock_service = MagicMock()
+        mock_service.create = AsyncMock(
+            side_effect=WorkflowServiceError("Invalid workflow configuration")
+        )
+
+        with patch("app.api.v1.workflows.WorkflowService", return_value=mock_service):
+            response = await async_client.post("/api/v1/workflows/", json=workflow_data)
+
+            assert response.status_code == status.HTTP_400_BAD_REQUEST
+            assert "Invalid workflow configuration" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_get_workflow_not_found_by_mock(self, async_client: AsyncClient):
+        """Test get workflow returns 404 when not found.
+
+        Tests lines 227-236 in workflows.py where get returns None.
+        """
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        workflow_id = uuid4()
+
+        mock_service = MagicMock()
+        mock_service.get = AsyncMock(return_value=None)
+
+        with patch("app.api.v1.workflows.WorkflowService", return_value=mock_service):
+            response = await async_client.get(f"/api/v1/workflows/{workflow_id}")
+
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+            assert "not found" in response.json()["detail"].lower()
+
+    @pytest.mark.asyncio
+    async def test_delete_workflow_not_found_by_mock(self, async_client: AsyncClient):
+        """Test delete workflow returns 404 when not found.
+
+        Tests delete workflow exception path in workflows.py.
+        """
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from app.services.workflow_service import WorkflowNotFoundError
+
+        workflow_id = uuid4()
+
+        mock_service = MagicMock()
+        mock_service.delete = AsyncMock(
+            side_effect=WorkflowNotFoundError(f"Workflow {workflow_id} not found")
+        )
+
+        with patch("app.api.v1.workflows.WorkflowService", return_value=mock_service):
+            response = await async_client.delete(f"/api/v1/workflows/{workflow_id}")
+
+            assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_create_node_validation_error(
+        self, async_client: AsyncClient, sample_workflow_data
+    ):
+        """Test create node with invalid data returns 422.
+
+        Tests schema validation before mock is applied.
+        """
+        # Create a workflow first
+        workflow_response = await async_client.post(
+            "/api/v1/workflows/", json=sample_workflow_data
+        )
+        workflow_id = workflow_response.json()["id"]
+
+        # Invalid node data (missing required fields)
+        node_data = {"name": "Test Node"}
+
+        response = await async_client.post(
+            f"/api/v1/workflows/{workflow_id}/nodes", json=node_data
+        )
+
+        # Schema validation returns 422, not 404
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
