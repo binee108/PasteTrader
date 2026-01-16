@@ -20,11 +20,11 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import GUID, Base, SoftDeleteMixin, TimestampMixin, UUIDMixin
-from app.models.enums import ScheduleType
+from app.models.enums import ExecutionHistoryStatus, ScheduleType
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -224,6 +224,12 @@ class Schedule(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
         back_populates="schedules",
     )
 
+    histories: Mapped[list[ScheduleHistory]] = relationship(
+        "ScheduleHistory",
+        back_populates="schedule",
+        cascade="all, delete-orphan",
+    )
+
     def __repr__(self) -> str:
         """Return string representation of the schedule."""
         return (
@@ -291,4 +297,94 @@ class Schedule(UUIDMixin, TimestampMixin, SoftDeleteMixin, Base):
         self.run_count += 1
 
 
-__all__ = ["Schedule"]
+class ScheduleHistory(UUIDMixin, TimestampMixin, Base):
+    """Schedule execution history model.
+
+    TAG: [SPEC-013] [DATABASE] [SCHEDULE_HISTORY] [MODEL]
+    REQ: REQ-013-011 - Schedule History Tracking
+
+    Tracks the execution history of scheduled workflows, storing
+    information about each scheduled execution including status,
+    duration, and error messages.
+
+    Attributes:
+        id: UUID primary key (from UUIDMixin)
+        created_at: Timestamp when history record was created (from TimestampMixin)
+        updated_at: Timestamp when history record was last updated (from TimestampMixin)
+        schedule_id: UUID of the associated schedule
+        workflow_execution_id: UUID of the workflow execution
+        triggered_at: Timestamp when the schedule was triggered
+        status: Execution status (ExecutionHistoryStatus enum)
+        duration_ms: Execution duration in milliseconds
+        error_message: Error message if execution failed
+        schedule: Relationship to the parent Schedule
+
+    Examples:
+        >>> history = ScheduleHistory(
+        ...     schedule_id=schedule.id,
+        ...     workflow_execution_id=execution.id,
+        ...     triggered_at=datetime.now(UTC),
+        ...     status=ExecutionHistoryStatus.COMPLETED,
+        ...     duration_ms=1500
+        ... )
+    """
+
+    __tablename__ = "schedule_history"
+
+    # Foreign key to schedules table
+    schedule_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(),
+        ForeignKey("schedules.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # Workflow execution reference
+    workflow_execution_id: Mapped[uuid.UUID] = mapped_column(
+        GUID(),
+        nullable=False,
+    )
+
+    # Execution metadata
+    triggered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
+    )
+
+    status: Mapped[ExecutionHistoryStatus] = mapped_column(
+        String(50),
+        nullable=False,
+        default=ExecutionHistoryStatus.PENDING,
+        server_default="pending",
+    )
+
+    duration_ms: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    error_message: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    # Relationship to Schedule
+    schedule: Mapped[Schedule] = relationship(
+        "Schedule",
+        back_populates="histories",
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation of the schedule history."""
+        return (
+            f"<ScheduleHistory(id={self.id}, "
+            f"schedule_id={self.schedule_id}, "
+            f"status={self.status})>"
+        )
+
+
+__all__ = ["Schedule", "ScheduleHistory"]

@@ -18,7 +18,7 @@ from app.models.enums import (
     TriggerType,
 )
 from app.models.execution import ExecutionLog, NodeExecution, WorkflowExecution
-from app.models.schedule import Schedule
+from app.models.schedule import Schedule, ScheduleHistory
 from app.models.tool import Tool
 from app.models.user import User
 from app.models.workflow import Edge, Node, Workflow
@@ -37,6 +37,7 @@ __all__ = [
     "NodeExecution",
     "NodeType",
     "Schedule",
+    "ScheduleHistory",
     "ScheduleType",
     "SoftDeleteMixin",
     "TimestampMixin",
