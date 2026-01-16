@@ -9,7 +9,7 @@ from app.services.workflow.processors.base import BaseProcessor, ProcessorConfig
 from app.services.workflow.processors.registry import ProcessorRegistry
 
 __all__ = [
-    "ProcessorRegistry",
     "BaseProcessor",
     "ProcessorConfig",
+    "ProcessorRegistry",
 ]

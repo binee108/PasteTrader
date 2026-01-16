@@ -4,7 +4,7 @@ TAG: [SPEC-012] [PROCESSOR] [ERRORS]
 REQ: REQ-012-006, REQ-012-007 - Error Context Capture and Graceful Propagation
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -33,7 +33,7 @@ class ProcessorValidationError(ProcessorError):
     processor: str
     errors: list[dict[str, Any]]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # Initialize the base Exception with the error message
         super().__init__(f"Validation failed in {self.processor}: {self.errors}")
 
@@ -59,7 +59,7 @@ class ProcessorExecutionError(ProcessorError):
     message: str
     retry_count: int = 0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # Initialize the base Exception with the error message
         super().__init__(
             f"Execution failed in {self.processor} "
@@ -89,7 +89,7 @@ class ProcessorTimeoutError(ProcessorError):
     node_id: str
     timeout_seconds: int
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # Initialize the base Exception with the error message
         super().__init__(
             f"Timeout in {self.processor} "
@@ -117,7 +117,7 @@ class ProcessorConfigurationError(ProcessorError):
     processor: str
     message: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # Initialize the base Exception with the error message
         super().__init__(f"Configuration error in {self.processor}: {self.message}")
 

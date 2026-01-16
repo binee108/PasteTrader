@@ -4,24 +4,23 @@ TAG: [SPEC-012] [PROCESSOR] [BASE]
 REQ: REQ-012-001, REQ-012-002, REQ-012-003, REQ-012-004, REQ-012-005
 """
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from datetime import datetime, UTC
-from typing import Any, Generic, TypeVar
 import asyncio
 import time
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel
-from pydantic import ValidationError
 
 from app.models.workflow import Node
 from app.services.workflow.context import ExecutionContext
+
 from .errors import (
-    ProcessorValidationError,
     ProcessorExecutionError,
     ProcessorTimeoutError,
 )
-from .metrics import ProcessorMetrics, MetricsCollector
+from .metrics import MetricsCollector, ProcessorMetrics
 
 InputT = TypeVar("InputT", bound=BaseModel)
 OutputT = TypeVar("OutputT", bound=BaseModel)
@@ -178,7 +177,6 @@ class BaseProcessor(ABC, Generic[InputT, OutputT]):
         Raises:
             ProcessorValidationError: If validation fails
         """
-        pass
 
     @abstractmethod
     async def process(self, validated_input: InputT) -> OutputT:
@@ -198,7 +196,6 @@ class BaseProcessor(ABC, Generic[InputT, OutputT]):
         Raises:
             Any processor-specific exceptions (will be retried if configured)
         """
-        pass
 
     @abstractmethod
     async def post_process(self, output: OutputT) -> dict[str, Any]:
@@ -217,7 +214,6 @@ class BaseProcessor(ABC, Generic[InputT, OutputT]):
         Returns:
             Serializable dictionary for downstream consumption
         """
-        pass
 
     async def _execute_with_retry(self, validated_input: InputT) -> OutputT:
         """Execute process() with retry logic.
@@ -246,7 +242,7 @@ class BaseProcessor(ABC, Generic[InputT, OutputT]):
                     self.process(validated_input),
                     timeout=self.config.timeout_seconds,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Timeout is NOT retriable - raise immediately
                 raise ProcessorTimeoutError(
                     processor=self.__class__.__name__,

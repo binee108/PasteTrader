@@ -4,20 +4,12 @@ TAG: [SPEC-012] [PROCESSOR] [REGISTRY]
 REQ: REQ-012-016, REQ-012-017 - Dynamic Processor Registration and Default Registration
 """
 
-from typing import TYPE_CHECKING
+from typing import Any
 
 from app.models.workflow import Node
 from app.services.workflow.context import ExecutionContext
 from app.services.workflow.processors.base import BaseProcessor, ProcessorConfig
 from app.services.workflow.processors.errors import ProcessorNotFoundError
-
-if TYPE_CHECKING:
-    from app.services.workflow.processors.tool import ToolNodeProcessor
-    from app.services.workflow.processors.agent import AgentNodeProcessor
-    from app.services.workflow.processors.condition import ConditionNodeProcessor
-    from app.services.workflow.processors.adapter import AdapterNodeProcessor
-    from app.services.workflow.processors.trigger import TriggerNodeProcessor
-    from app.services.workflow.processors.aggregator import AggregatorNodeProcessor
 
 
 class ProcessorRegistry:
@@ -34,9 +26,9 @@ class ProcessorRegistry:
         result = await processor.execute(inputs)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize registry and register default processors."""
-        self._processors: dict[str, type[BaseProcessor]] = {}
+        self._processors: dict[str, type[BaseProcessor[Any, Any]]] = {}
         self._register_defaults()
 
     def _register_defaults(self) -> None:
@@ -47,12 +39,12 @@ class ProcessorRegistry:
         Registers the six built-in processor types.
         """
         # Import here to avoid circular dependencies
-        from app.services.workflow.processors.tool import ToolNodeProcessor
-        from app.services.workflow.processors.agent import AgentNodeProcessor
-        from app.services.workflow.processors.condition import ConditionNodeProcessor
         from app.services.workflow.processors.adapter import AdapterNodeProcessor
-        from app.services.workflow.processors.trigger import TriggerNodeProcessor
+        from app.services.workflow.processors.agent import AgentNodeProcessor
         from app.services.workflow.processors.aggregator import AggregatorNodeProcessor
+        from app.services.workflow.processors.condition import ConditionNodeProcessor
+        from app.services.workflow.processors.tool import ToolNodeProcessor
+        from app.services.workflow.processors.trigger import TriggerNodeProcessor
 
         defaults = {
             "tool": ToolNodeProcessor,
@@ -85,7 +77,7 @@ class ProcessorRegistry:
         """
         self._processors[node_type] = processor_class
 
-    def get(self, node_type: str) -> type[BaseProcessor]:
+    def get(self, node_type: str) -> type[BaseProcessor[Any, Any]]:
         """Get processor class for node type.
 
         TAG: [SPEC-012] [REGISTRY] [GET]
@@ -111,7 +103,7 @@ class ProcessorRegistry:
         node: Node,
         context: ExecutionContext,
         config: ProcessorConfig | None = None,
-    ) -> BaseProcessor:
+    ) -> BaseProcessor[Any, Any]:
         """Create processor instance with configuration.
 
         TAG: [SPEC-012] [REGISTRY] [CREATE]

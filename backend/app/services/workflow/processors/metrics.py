@@ -4,10 +4,10 @@ TAG: [SPEC-012] [PROCESSOR] [METRICS]
 REQ: REQ-012-008, REQ-012-009 - Processing Metrics and Aggregation
 """
 
-from dataclasses import dataclass, field
-from datetime import datetime, UTC
-from typing import Any
 import threading
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from typing import Any
 
 
 @dataclass

@@ -8,9 +8,9 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from app.schemas.processors import ToolProcessorInput, ToolProcessorOutput
 from app.services.workflow.processors.base import BaseProcessor
 from app.services.workflow.processors.errors import ProcessorValidationError
-from app.schemas.processors import ToolProcessorInput, ToolProcessorOutput
 
 
 class ToolNodeProcessor(BaseProcessor[ToolProcessorInput, ToolProcessorOutput]):
