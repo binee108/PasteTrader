@@ -153,7 +153,7 @@ Usage:
 
 
 async def get_current_user_optional(
-    db: AsyncSession,
+    db: DBSession,
     authorization: str | None = None,
 ) -> User | None:
     """Get current user if authenticated (optional).
@@ -199,7 +199,7 @@ async def get_current_user_optional(
 
 
 async def get_current_user(
-    db: AsyncSession,
+    db: DBSession,
     authorization: str | None = None,
 ) -> User:
     """Get current authenticated user (required).
