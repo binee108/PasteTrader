@@ -6,41 +6,40 @@
 |-------|-------|
 | SPEC ID | SPEC-011 |
 | Title | Workflow Execution Engine |
-| Created | 2026-01-16 |
-| Status | Draft |
+| Created | 2026-01-15 |
+| Status | In Progress |
 | Priority | High (P0) |
 | Lifecycle | spec-anchored |
 | Author | workflow-spec |
-| Phase | Phase 4 - Engine Core |
+| Phase | Phase 4 - Workflow Engine |
 
 ## Tags
 
-`[SPEC-011]` `[EXEC]` `[DAG]` `[WORKFLOW]` `[EXECUTION]` `[ASYNCIO]` `[RETRY]` `[BACKEND]`
+`[SPEC-011]` `[EXECUTION]` `[DAG]` `[ASYNCIO]` `[WORKFLOW]` `[ENGINE]` `[BACKEND]`
 
 ---
 
 ## Overview
 
-This SPEC defines the Workflow Execution Engine that provides runtime execution of validated DAG workflows. While SPEC-010 (DAG Validation Service) ensures workflow structural validity, this SPEC implements the actual execution runtime with async parallel execution, error handling, retry logic, and execution context management.
+이 SPEC은 PasteTrader 워크플로우 엔진의 핵심인 DAG 토폴로지 정렬 기반 비동기 실행 엔진을 정의합니다. SPEC-010 DAG Validator를 활용하여 워크플로우 구조를 검증한 후, asyncio 기반 병렬 노드 실행과 ExecutionContext를 통한 노드 간 데이터 전달을 구현합니다.
 
 ### Scope
 
-- DAG Executor Core: Topological sort-based execution ordering
-- Parallel async execution using asyncio.gather
-- Execution state management (pending, running, completed, failed)
-- Error handling with graceful degradation options
-- Configurable retry logic with exponential backoff
-- Shared execution context management
-- Node type executors (Tool, Agent, Condition, Adapter, Aggregator)
-- Scheduler integration (APScheduler)
-- Execution history tracking
+- 워크플로우 실행 엔진 모듈 (`backend/app/services/workflow/executor.py`)
+- ExecutionContext 관리 (`backend/app/services/workflow/context.py`)
+- DAG 토폴로지 정렬 (Kahn's Algorithm)
+- asyncio.TaskGroup 기반 병렬 노드 실행
+- 에러 핸들링 및 지수 백오프 재시도
+- 조건 노드 분기 처리
+- 타임아웃 및 취소 지원
+- ExecutionLog 통합
 
 ### Out of Scope
 
-- Workflow DAG validation (covered by SPEC-010)
-- Tool/Agent definition and management (covered by SPEC-009)
-- Workflow CRUD operations (covered by SPEC-007)
-- Frontend workflow editor (covered by separate SPEC)
+- 개별 노드 프로세서 구현 (SPEC-012)
+- 스케줄러 통합 (SPEC-008에서 처리)
+- 실시간 WebSocket 실행 상태 업데이트 (미래 SPEC)
+- 분산 실행 (미래 SPEC)
 
 ---
 
@@ -50,20 +49,18 @@ This SPEC defines the Workflow Execution Engine that provides runtime execution 
 
 | Component | Version | Purpose |
 |-----------|---------|---------|
-| Python | 3.13.x | Runtime environment |
-| asyncio | builtin | Async parallel execution |
-| FastAPI | 0.115.x | API framework for execution triggers |
+| FastAPI | 0.115.x | API framework |
 | Pydantic | 2.10.x | Schema validation |
-| SQLAlchemy | 2.0.x | ORM for execution records |
-| APScheduler | 3.11.x | Scheduled workflow execution |
-| asyncpg | 0.30.x | PostgreSQL async driver |
+| SQLAlchemy | 2.0.x | Async ORM |
+| Python | 3.13.x | Runtime environment |
+| asyncio | built-in | Async execution (TaskGroup, timeout) |
 
 ### Configuration Dependencies
 
 - SPEC-001: Base models, Mixins, Enums
-- SPEC-003: Workflow, Node, Edge models (execution targets)
-- SPEC-009: ToolRegistry, AgentManager (node execution dependencies)
-- SPEC-010: DAGValidator, topological sort (execution ordering)
+- SPEC-003: Workflow, Node, Edge models
+- SPEC-005: WorkflowExecution, NodeExecution, ExecutionLog models
+- SPEC-010: DAG Validator (topological sort, cycle detection)
 
 ---
 
@@ -73,522 +70,282 @@ This SPEC defines the Workflow Execution Engine that provides runtime execution 
 
 | Assumption | Confidence | Evidence | Risk if Wrong |
 |------------|------------|----------|---------------|
-| asyncio.gather scales to 50+ parallel nodes | High | Python 3.13 proven scalability | Need semaphore limiting |
-| Topological sort from SPEC-010 is correct | High | Validated before execution | Stale validation requires re-check |
-| ToolRegistry/AgentManager are thread-safe | Medium | SPEC-009 implementation | Need async locks |
-| Context isolation per execution | High | Dict-based context proven safe | Memory leak risk with large contexts |
+| asyncio.TaskGroup provides structured concurrency | High | Python 3.11+ standard library | Need fallback to gather() |
+| Kahn's algorithm scales to 500+ nodes | High | O(V+E) complexity | Need level-based batching |
+| ExecutionContext thread-safety via asyncio.Lock | High | Standard async pattern | Need alternative concurrency control |
+| Node execution can complete within timeout_seconds | Medium | Configurable per node | May need forced termination |
 
 ### Design Assumptions
 
 | Assumption | Confidence | Risk if Wrong |
 |------------|------------|---------------|
-| Fail-fast default behavior is appropriate | Medium | Users may want continue-on-error |
-| Exponential backoff prevents API throttling | High | Some APIs need custom backoff |
-| In-memory context is sufficient | Medium | Long workflows may need persistence |
-| Single-process execution is MVP | High | Multi-worker requires distributed state |
+| Nodes in same topological level have no dependencies | High | Sequential fallback needed |
+| Failed nodes should block downstream execution | High | Add failure isolation policy |
+| Retry with exponential backoff is sufficient | Medium | Add circuit breaker pattern |
 
 ---
 
 ## Requirements
 
-### DAG Executor Core Requirements
+### Core Execution Requirements
 
-#### REQ-011-001: Topological Sort Execution Order
-
-**Event-Driven Requirement**
-
-**WHEN** a workflow execution is initiated, **THEN** the system shall execute nodes in topological order as provided by the DAG Validator.
-
-**Details:**
-
-- Use `TopologyResult.execution_order` from SPEC-010
-- Execute nodes level-by-level respecting dependencies
-- Within each level, execute independent nodes in parallel
-
-**Example:**
-```python
-# Given execution_order from validator:
-[
-    ["trigger-1"],                    # Level 0
-    ["tool-1", "tool-2"],             # Level 1 (parallel)
-    ["condition-1"],                  # Level 2
-    ["agent-1", "agent-2"],           # Level 3 (parallel)
-    ["aggregator-1"]                  # Level 4
-]
-```
-
-#### REQ-011-002: Parallel Async Execution
+#### REQ-011-001: DAG 토폴로지 정렬 기반 실행
 
 **Event-Driven Requirement**
 
-**WHEN** multiple nodes at the same topological level have no interdependencies, **THEN** the system shall execute them concurrently using asyncio.gather.
+**WHEN** 워크플로우 실행이 요청되면, **THEN** 시스템은 DAG 토폴로지 정렬을 수행하여 노드 실행 순서를 결정해야 합니다.
 
 **Details:**
 
-- Use `asyncio.gather(*tasks, return_exceptions=True)`
-- Configurable concurrency limit via semaphore
-- Respect node-level timeout_seconds
+- Algorithm: Kahn's Algorithm (SPEC-010의 topological_sort_levels 활용)
+- Output: 실행 레벨별로 그룹화된 노드 목록
+- Performance: O(V+E) time complexity
+- 같은 레벨의 노드는 병렬 실행 가능
 
-**Example:**
-```python
-async def execute_level(self, level: list[str]):
-    semaphore = asyncio.Semaphore(self.max_parallel_nodes)
-    tasks = [self._execute_with_semaphore(node_id, semaphore)
-             for node_id in level]
-    return await asyncio.gather(*tasks, return_exceptions=True)
+**Response:**
+```json
+{
+  "execution_order": [
+    {"level": 0, "node_ids": ["trigger-1"]},
+    {"level": 1, "node_ids": ["tool-1", "tool-2"]},
+    {"level": 2, "node_ids": ["agent-1"]}
+  ]
+}
 ```
 
-#### REQ-011-003: Dependency Resolution
-
-**State-Driven Requirement**
-
-**IF** a node depends on outputs from parent nodes, **THEN** the system shall gather all required inputs before executing the node.
-
-**Details:**
-
-- Check all dependencies are in COMPLETED state
-- Gather outputs from execution context
-- Skip node if any dependency failed (configurable)
-
-**Example:**
-```python
-def _gather_inputs(self, node: Node) -> dict[str, Any]:
-    inputs = {}
-    for edge in self.incoming_edges[node.id]:
-        source_output = self.context[edge.source_node_id]
-        if edge.source_handle:
-            inputs[edge.source_handle] = source_output[edge.source_handle]
-        else:
-            inputs[edge.source_node_id] = source_output
-    return inputs
-```
-
-#### REQ-011-004: Execution State Management
+#### REQ-011-002: asyncio.TaskGroup 기반 병렬 실행
 
 **Ubiquitous Requirement**
 
-The system shall **always** maintain execution state for each node throughout the workflow execution lifecycle.
+시스템은 **항상** 같은 토폴로지 레벨의 노드들을 asyncio.TaskGroup을 사용하여 병렬로 실행해야 합니다.
 
-**States:**
-- `PENDING`: Node not yet started
-- `RUNNING`: Node currently executing
-- `COMPLETED`: Node finished successfully
-- `FAILED`: Node execution failed
-- `SKIPPED`: Node skipped due to dependency failure or condition evaluation
-- `RETRYING`: Node being retried after failure
+**Details:**
 
-**State Transitions:**
+- Structured concurrency with TaskGroup
+- 동시 실행 노드 수 제한 (Semaphore)
+- 한 노드 실패 시 다른 병렬 노드는 계속 실행
+
+**Code Pattern:**
+```python
+async with asyncio.TaskGroup() as tg:
+    tasks = [
+        tg.create_task(self._execute_node(node, context))
+        for node in level_nodes
+    ]
 ```
-PENDING → RUNNING → COMPLETED
-    ↓         ↓
-SKIPPED   FAILED → RETRYING → RUNNING → COMPLETED/FAILED
+
+#### REQ-011-003: ExecutionContext 노드 간 데이터 전달
+
+**Ubiquitous Requirement**
+
+시스템은 **항상** ExecutionContext를 통해 노드 간 데이터를 전달해야 합니다.
+
+**Details:**
+
+- Thread-safe context (asyncio.Lock)
+- 선행 노드 출력을 후속 노드 입력으로 매핑
+- 변수 저장 및 조회 지원
+- 워크플로우 레벨 변수 지원
+
+**Interface:**
+```python
+class ExecutionContext:
+    async def get_input(self, node: Node, edges: list[Edge]) -> dict
+    async def set_output(self, node_id: UUID, data: dict) -> None
+    async def get_variable(self, name: str) -> Any
+    async def set_variable(self, name: str, value: Any) -> None
 ```
 
 ---
 
 ### Error Handling Requirements
 
-#### REQ-011-005: Per-Node Error Capture
-
-**Ubiquitous Requirement**
-
-The system shall **always** capture detailed error information when a node execution fails.
-
-**Captured Information:**
-- Exception type and message
-- Stack trace
-- Node inputs at time of failure
-- Timestamp of failure
-- Retry attempt number
-
-**Error Storage Format:**
-```python
-@dataclass
-class NodeExecutionError:
-    node_id: str
-    exception_type: str
-    message: str
-    stack_trace: str
-    inputs: dict[str, Any]
-    occurred_at: datetime
-    retry_count: int
-```
-
-#### REQ-011-006: Graceful Degradation Strategy
-
-**State-Driven Requirement**
-
-**IF** `error_handling.on_node_failure` is `"continue"`, **THEN** the system shall continue executing remaining nodes after a node failure.
-
-**IF** `error_handling.on_node_failure` is `"stop"`, **THEN** the system shall halt execution immediately after a node failure.
-
-**Configuration:**
-```yaml
-error_handling:
-  on_node_failure: continue  # | stop
-  propagate_errors: true
-  failure_threshold: null    # Stop after N failures
-```
-
-#### REQ-011-007: Error Context Propagation
+#### REQ-011-004: 지수 백오프 재시도
 
 **Event-Driven Requirement**
 
-**WHEN** a node fails, **THEN** the system shall propagate error context to dependent nodes if configured.
+**WHEN** 노드 실행이 일시적 오류로 실패하면, **THEN** 시스템은 노드의 retry_config에 따라 지수 백오프로 재시도해야 합니다.
 
 **Details:**
 
-- Downstream nodes can access upstream errors via `{{ errors.parent_node_id }}`
-- Enables conditional logic based on parent failures
-- Error context available in `context['_errors']` dictionary
+- Node.retry_config: `{"max_retries": 3, "delay": 1}`
+- Exponential backoff: `delay * (2 ** attempt)`
+- retry_count를 NodeExecution에 기록
+- 최종 실패 시 error_message 저장
 
-#### REQ-011-008: Fallback Node Execution
-
-**Optional Requirement**
-
-**Where possible**, the system shall support fallback node execution when primary node fails.
-
-**Configuration:**
-```yaml
-nodes:
-  - id: price-fetcher-primary
-    type: tool
-    fallback_to: price-fetcher-backup
-
-  - id: price-fetcher-backup
-    type: tool
-    config:
-      api_endpoint: "https://backup-api.example.com"
+**Retry Pattern:**
+```python
+for attempt in range(max_retries + 1):
+    try:
+        result = await self._execute_node(node, context)
+        return result
+    except TransientError:
+        if attempt < max_retries:
+            await asyncio.sleep(delay * (2 ** attempt))
+        else:
+            raise
 ```
 
----
-
-### Retry Logic Requirements
-
-#### REQ-011-009: Configurable Retry Attempts
-
-**State-Driven Requirement**
-
-**IF** a node has `retry_config.max_retries > 0`, **THEN** the system shall retry failed node execution up to the configured limit.
-
-**Retry Configuration:**
-```yaml
-nodes:
-  - id: unstable-tool
-    retry_config:
-      max_retries: 3
-      initial_delay_seconds: 1
-      max_delay_seconds: 60
-      backoff_multiplier: 2.0
-      retry_on: ["TimeoutError", "ConnectionError"]
-```
-
-#### REQ-011-010: Exponential Backoff
+#### REQ-011-005: 실패 격리 정책
 
 **Event-Driven Requirement**
 
-**WHEN** retrying a failed node, **THEN** the system shall apply exponential backoff between retry attempts.
+**WHEN** 노드가 실패하면, **THEN** 시스템은 해당 노드의 모든 하류(downstream) 노드를 BLOCKED로 표시해야 합니다.
 
-**Backoff Formula:**
-```
-delay = min(initial_delay * (backoff_multiplier ^ attempt), max_delay)
-```
+**Details:**
 
-**Example:**
-- Attempt 1: delay = 1s
-- Attempt 2: delay = 2s
-- Attempt 3: delay = 4s
-- Capped at max_delay (e.g., 60s)
+- BFS로 실패 노드의 모든 하류 노드 탐색
+- 하류 노드를 SKIPPED 상태로 표시
+- 독립적인 다른 브랜치는 계속 실행
+- 실패 원인을 로그에 기록
 
-#### REQ-011-011: Retry Condition Evaluation
-
-**State-Driven Requirement**
-
-**IF** `retry_config.retry_on` is specified, **THEN** the system shall only retry on listed exception types.
-
-**IF** `retry_config.retry_on` is `null`, **THEN** the system shall retry on all exceptions.
-
-**Valid Exception Types:**
-- Built-in: `TimeoutError`, `ConnectionError`, `HTTPError`
-- Custom: `APIThrottledError`, `TemporaryFailure`
-- Wildcard: `"*"` for all exceptions
-
-#### REQ-011-012: Maximum Retry Limit
-
-**Unwanted Behavior Requirement**
-
-The system **shall not** retry a node more than `retry_config.max_retries` times.
-
-**Behavior:**
-- After max retries exceeded, mark node as FAILED
-- Do not attempt additional retries
-- Proceed based on `error_handling.on_node_failure` setting
-
----
-
-### Execution Context Requirements
-
-#### REQ-011-013: Shared Context Management
-
-**Ubiquitous Requirement**
-
-The system shall **always** maintain a shared execution context throughout the workflow execution.
-
-**Context Structure:**
-```python
-@dataclass
-class ExecutionContext:
-    execution_id: str
-    workflow_id: str
-    variables: dict[str, Any]        # Workflow-level variables
-    node_outputs: dict[str, Any]     # {node_id: output_data}
-    errors: dict[str, Any]           # {node_id: error_info}
-    metadata: dict[str, Any]         # timestamps, counts, etc.
-```
-
-#### REQ-011-014: Node Output Storage
-
-**Event-Driven Requirement**
-
-**WHEN** a node completes successfully, **THEN** the system shall store its outputs in the execution context under the node ID.
-
-**Storage Format:**
-```python
-context.node_outputs[node_id] = {
-    "output_1": value1,
-    "output_2": value2,
-    "_meta": {
-        "executed_at": "2026-01-16T09:30:05Z",
-        "duration_ms": 150
-    }
+**Error Response:**
+```json
+{
+  "node_id": "tool-1",
+  "status": "FAILED",
+  "error_message": "Connection timeout",
+  "blocked_downstream": ["agent-1", "aggregator-1"]
 }
 ```
 
-#### REQ-011-015: Variable Binding and Substitution
-
-**State-Driven Requirement**
-
-**IF** a node configuration contains variable references, **THEN** the system shall substitute them with actual values before execution.
-
-**Variable Reference Patterns:**
-- `{{ variables.rsi_period }}` → Workflow variable
-- `{{ nodes.node-1.outputs.stock_list }}` → Node output reference
-- `{{ inputs.symbol }}` → Runtime input parameter
-
-**Example:**
-```yaml
-nodes:
-  - id: fetch-price
-    config:
-      symbol: "{{ variables.default_symbol }}"
-      period: "{{ nodes.configurator.outputs.period }}"
-```
-
-#### REQ-011-016: Context Isolation Between Executions
-
-**Ubiquitous Requirement**
-
-The system shall **always** isolate execution contexts between different workflow executions.
-
-**Isolation Guarantees:**
-- Each execution has unique `execution_id`
-- Context never shared between executions
-- Concurrent executions maintain separate contexts
-- No cross-execution variable leakage
-
 ---
 
-### Node Execution Requirements
+### Node Type Specific Requirements
 
-#### REQ-011-017: Tool Node Execution
-
-**Event-Driven Requirement**
-
-**WHEN** a tool node is executed, **THEN** the system shall invoke the corresponding tool from ToolRegistry with validated inputs.
-
-**Execution Flow:**
-1. Retrieve tool from `ToolRegistry.get(tool_id)`
-2. Validate inputs against tool's `input_schema`
-3. Execute tool with timeout enforcement
-4. Validate outputs against tool's `output_schema` (if defined)
-5. Store outputs in context
-
-**Error Handling:**
-- Timeout: mark as FAILED, apply retry logic
-- Invalid input: mark as FAILED, do not retry (input error)
-- Tool error: mark as FAILED, apply retry logic
-
-#### REQ-011-018: Agent Node Execution
+#### REQ-011-006: 조건 노드 분기 처리
 
 **Event-Driven Requirement**
 
-**WHEN** an agent node is executed, **THEN** the system shall invoke the corresponding agent from AgentManager with the configured prompt and inputs.
+**WHEN** CONDITION 타입 노드를 실행하면, **THEN** 시스템은 조건을 평가하고 매칭되는 엣지만 따라가야 합니다.
 
-**Execution Flow:**
-1. Retrieve agent from `AgentManager.get(agent_id)`
-2. Build execution context for agent
-3. Execute agent with LLM provider
-4. Parse structured output (if schema defined)
-5. Store outputs in context
+**Details:**
 
-**Configuration:**
-```yaml
-nodes:
-  - id: analyzer
-    type: agent
-    agent_id: buy_signal_analyzer
-    config:
-      prompt_template: |
-        Analyze the following stock data:
-        {{ inputs.stock_data }}
-
-        Provide a buy/sell recommendation.
-      max_tokens: 4096
-      temperature: 0.3
-```
-
-#### REQ-011-019: Condition Node Evaluation
-
-**Event-Driven Requirement**
-
-**WHEN** a condition node is evaluated, **THEN** the system shall evaluate the condition expression and route to the appropriate output branch.
+- node.config에서 조건 표현식 파싱
+- context 변수를 사용하여 조건 평가
+- 우선순위(priority)에 따라 엣지 선택
+- 매칭되지 않는 경로의 노드는 SKIPPED
 
 **Condition Evaluation:**
 ```python
-# Condition configuration
-conditions:
-  - name: oversold
-    expression: "rsi < variables.oversold_threshold"
-    target_node: buy-analyzer
-  - name: overbought
-    expression: "rsi > variables.overbought_threshold"
-    target_node: sell-analyzer
-  - name: neutral
-    expression: "else"
-    target_node: hold-analyzer
+# Edge conditions: {"expression": "rsi < 30", "handle": "oversold"}
+for edge in sorted(outgoing_edges, key=lambda e: e.priority):
+    if evaluate_condition(edge.condition, context):
+        return [edge.target_node_id]
+return []  # No matching condition
 ```
 
-**Evaluation Order:**
-1. Evaluate conditions in sequence
-2. First matching condition determines output
-3. `else` condition matches if no prior match
-4. Store selected branch in context for routing
-
-#### REQ-011-020: Adapter Node Transformation
+#### REQ-011-007: 트리거 노드 처리
 
 **Event-Driven Requirement**
 
-**WHEN** an adapter node is executed, **THEN** the system shall transform input data according to the configured transformation rules.
+**WHEN** 워크플로우 실행이 시작되면, **THEN** 시스템은 TRIGGER 노드를 실행하고 입력 데이터를 컨텍스트에 저장해야 합니다.
 
-**Transformation Types:**
-- `json_to_dataframe`: Convert JSON to pandas DataFrame
-- `dataframe_to_json`: Convert DataFrame to JSON-serializable dict
-- `map_fields`: Rename/restructure fields
-- `filter`: Filter data based on conditions
-- `aggregate`: Group and aggregate data
+**Details:**
 
-**Example:**
-```yaml
-nodes:
-  - id: adapter-1
-    type: adapter
-    config:
-      transformation: |
-        def transform(inputs):
-            df = pd.DataFrame(inputs['stock_list'])
-            df['rsi_normalized'] = df['rsi'] / 100
-            return df.to_dict('records')
-```
-
-#### REQ-011-021: Aggregator Node Collection
-
-**Event-Driven Requirement**
-
-**WHEN** an aggregator node is executed, **THEN** the system shall collect outputs from all input nodes and apply the configured aggregation strategy.
-
-**Aggregation Strategies:**
-- `merge`: Combine all outputs into single list
-- `concatenate`: Join sequences
-- `sum/count/avg`: Numeric aggregation
-- `custom`: Python function for custom aggregation
-
-**Example:**
-```yaml
-nodes:
-  - id: aggregate-signals
-    type: aggregator
-    config:
-      strategy: merge
-      sort_by: confidence
-      limit: 10
-```
+- 입력 데이터를 ExecutionContext.variables에 저장
+- 트리거 메타데이터 (trigger_type, triggered_at) 기록
+- 트리거 노드는 항상 레벨 0
 
 ---
 
-### Scheduler Integration Requirements
+### Timeout and Cancellation Requirements
 
-#### REQ-011-022: APScheduler Integration
+#### REQ-011-008: 노드 타임아웃 처리
 
-**Ubiquitous Requirement**
+**Unwanted Behavior Requirement**
 
-The system shall **always** integrate with APScheduler for scheduled workflow execution.
+시스템은 **절대** Node.timeout_seconds를 초과하여 노드를 실행해서는 안 됩니다.
 
-**Scheduler Configuration:**
+**Details:**
+
+- asyncio.timeout() 사용
+- 타임아웃 시 NodeTimeoutError 발생
+- 노드를 FAILED 상태로 표시
+- 타임아웃 정보를 로그에 기록
+
+**Timeout Pattern:**
 ```python
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-
-class WorkflowScheduler:
-    def __init__(self):
-        self.scheduler = AsyncIOScheduler()
-        self.executor = WorkflowExecutor()
+try:
+    async with asyncio.timeout(node.timeout_seconds):
+        result = await self._execute_node(node, context)
+except asyncio.TimeoutError:
+    raise NodeTimeoutError(f"Node {node.id} timed out after {node.timeout_seconds}s")
 ```
 
-#### REQ-011-023: Cron-Based Trigger Support
+#### REQ-011-009: 워크플로우 취소 지원
 
 **Event-Driven Requirement**
 
-**WHEN** a workflow has a schedule configuration, **THEN** the system shall register it with APScheduler using cron expression.
+**WHEN** 워크플로우 취소가 요청되면, **THEN** 시스템은 실행 중인 모든 노드를 gracefully 종료해야 합니다.
 
-**Configuration:**
-```yaml
-workflow:
-  schedule:
-    cron: "30 9,15 * * 1-5"  # 9:30 and 15:00, weekdays only
-    timezone: "Asia/Seoul"
-```
+**Details:**
 
-#### REQ-011-024: Manual/Ondemand Execution
+- Cancellation flag 설정
+- 실행 중인 태스크 취소
+- 대기 중인 노드를 CANCELLED 상태로 표시
+- 이미 완료된 노드는 그대로 유지
 
-**Event-Driven Requirement**
+---
 
-**WHEN** a manual execution request is received, **THEN** the system shall execute the workflow immediately without scheduling.
+### Logging and Monitoring Requirements
 
-**API Endpoint:**
-```python
-@router.post("/workflows/{workflow_id}/execute")
-async def execute_workflow(
-    workflow_id: UUID,
-    inputs: dict[str, Any] | None = None
-) -> ExecutionResponse:
-    """Execute workflow immediately on demand."""
-```
-
-#### REQ-011-025: Execution History Tracking
+#### REQ-011-010: ExecutionLog 통합
 
 **Ubiquitous Requirement**
 
-The system shall **always** record execution history for every workflow execution.
+시스템은 **항상** 워크플로우 및 노드 실행 이벤트를 ExecutionLog에 기록해야 합니다.
 
-**Tracked Information:**
-- Execution ID, Workflow ID
-- Start time, End time, Duration
-- Final status (completed/failed/partial)
-- Node execution details (status, outputs, errors)
-- Execution context snapshot (configurable)
+**Details:**
 
-**Storage:**
-- `workflow_executions` table (from SPEC-005)
-- `node_executions` table (from SPEC-005)
+- 워크플로우 시작/종료 로그
+- 각 노드 실행 시작/완료/실패 로그
+- 에러 발생 시 ERROR 레벨 로그
+- 재시도 시 WARN 레벨 로그
+
+**Log Levels:**
+- INFO: 정상 실행 이벤트
+- WARN: 재시도, 경고 조건
+- ERROR: 실패, 타임아웃
+- DEBUG: 상세 실행 정보
+
+---
+
+### State Management Requirements
+
+#### REQ-011-011: 실행 상태 전이
+
+**Ubiquitous Requirement**
+
+시스템은 **항상** 올바른 상태 전이를 따라야 합니다.
+
+**WorkflowExecution 상태 전이:**
+```
+PENDING -> RUNNING -> COMPLETED
+                   -> FAILED
+         -> CANCELLED
+```
+
+**NodeExecution 상태 전이:**
+```
+PENDING -> RUNNING -> COMPLETED
+                   -> FAILED
+                   -> SKIPPED (조건 미충족 또는 상류 실패)
+         -> CANCELLED
+```
+
+#### REQ-011-012: 동시성 제어
+
+**Unwanted Behavior Requirement**
+
+시스템은 **절대** 지정된 max_parallel_nodes를 초과하여 동시에 노드를 실행해서는 안 됩니다.
+
+**Details:**
+
+- asyncio.Semaphore 사용
+- 기본값: 10개 동시 노드
+- 구성 가능한 제한
+- 리소스 고갈 방지
 
 ---
 
@@ -600,697 +357,655 @@ The system shall **always** record execution history for every workflow executio
 backend/
   app/
     services/
+      workflow/                    # Package from SPEC-010
+        __init__.py               # Add new exports
+        executor.py               # NEW - Workflow Executor
+        context.py                # NEW - ExecutionContext
+        # Existing from SPEC-010:
+        validator.py              # DAG Validator
+        graph.py                  # Graph data structures
+        algorithms.py             # Graph algorithms
+        exceptions.py             # Add execution exceptions
+  tests/
+    services/
       workflow/
-        executor.py              # Main DAG Executor (NEW)
-        node_executors.py        # Node type executors (NEW)
-        context.py               # Execution context management (NEW)
-        retry.py                 # Retry logic with backoff (NEW)
-        scheduler.py             # Scheduler wrapper (NEW)
-    schemas/
-      execution.py               # Execution schemas (NEW)
-    api/
-      v1/
-        executions.py            # Execution API endpoints (NEW)
+        test_executor.py          # NEW - Executor tests
+        test_context.py           # NEW - Context tests
+        test_integration.py       # NEW - Integration tests
 ```
 
-### SPEC-011-B: DAG Executor Interface
+### SPEC-011-B: ExecutionContext Interface
+
+```python
+# services/workflow/context.py
+from typing import Any, Optional
+from uuid import UUID
+import asyncio
+
+from app.models.workflow import Node, Edge
+
+
+class ExecutionContext:
+    """Thread-safe context for passing data between nodes.
+
+    TAG: [SPEC-011] [EXECUTION] [CONTEXT]
+
+    Provides:
+    - Node output storage and retrieval
+    - Variable management for workflow-level data
+    - Async-safe operations with Lock
+    - Input resolution from predecessor nodes
+    """
+
+    def __init__(
+        self,
+        workflow_execution_id: UUID,
+        input_data: dict[str, Any],
+    ):
+        self._workflow_execution_id = workflow_execution_id
+        self._variables: dict[str, Any] = dict(input_data)
+        self._node_outputs: dict[UUID, dict[str, Any]] = {}
+        self._errors: list[dict[str, Any]] = []
+        self._lock = asyncio.Lock()
+
+    @property
+    def workflow_execution_id(self) -> UUID:
+        return self._workflow_execution_id
+
+    async def get_input(
+        self,
+        node: Node,
+        incoming_edges: list[Edge],
+    ) -> dict[str, Any]:
+        """Get input data for a node from predecessor outputs.
+
+        Aggregates outputs from all predecessor nodes based on incoming edges.
+        """
+        async with self._lock:
+            input_data = dict(self._variables)  # Start with workflow variables
+            for edge in incoming_edges:
+                predecessor_output = self._node_outputs.get(
+                    edge.source_node_id, {}
+                )
+                # Apply edge mapping if defined
+                if edge.condition and "mapping" in edge.condition:
+                    # Custom mapping logic
+                    pass
+                else:
+                    input_data.update(predecessor_output)
+            return input_data
+
+    async def set_output(
+        self,
+        node_id: UUID,
+        data: dict[str, Any],
+    ) -> None:
+        """Store output data from a node."""
+        async with self._lock:
+            self._node_outputs[node_id] = data
+
+    async def get_output(self, node_id: UUID) -> Optional[dict[str, Any]]:
+        """Get output data for a specific node."""
+        async with self._lock:
+            return self._node_outputs.get(node_id)
+
+    async def get_variable(self, name: str) -> Any:
+        """Get a workflow variable."""
+        async with self._lock:
+            return self._variables.get(name)
+
+    async def set_variable(self, name: str, value: Any) -> None:
+        """Set a workflow variable."""
+        async with self._lock:
+            self._variables[name] = value
+
+    async def add_error(
+        self,
+        node_id: UUID,
+        error_type: str,
+        message: str,
+    ) -> None:
+        """Record an execution error."""
+        async with self._lock:
+            self._errors.append({
+                "node_id": str(node_id),
+                "error_type": error_type,
+                "message": message,
+            })
+
+    def has_errors(self) -> bool:
+        """Check if any errors occurred."""
+        return len(self._errors) > 0
+
+    async def get_all_outputs(self) -> dict[UUID, dict[str, Any]]:
+        """Get all node outputs."""
+        async with self._lock:
+            return dict(self._node_outputs)
+```
+
+### SPEC-011-C: WorkflowExecutor Interface
 
 ```python
 # services/workflow/executor.py
-from uuid import UUID
+from dataclasses import dataclass
 from typing import Any, Optional
+from uuid import UUID
+from datetime import datetime, UTC
 import asyncio
-from dataclasses import dataclass, field
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from sqlalchemy import select
 
 from app.models.workflow import Workflow, Node, Edge
-from app.schemas.execution import (
-    ExecutionContext,
-    ExecutionResult,
-    NodeExecutionResult,
-    ExecutionConfig,
+from app.models.execution import WorkflowExecution, NodeExecution
+from app.models.enums import ExecutionStatus, NodeType, TriggerType, LogLevel
+from app.services.execution_service import (
+    WorkflowExecutionService,
+    NodeExecutionService,
+    ExecutionLogService,
 )
+from app.services.workflow.context import ExecutionContext
 from app.services.workflow.validator import DAGValidator
+from app.services.workflow import algorithms
+from app.services.workflow.graph import Graph
+from app.services.workflow.exceptions import (
+    DAGValidationError,
+    NodeTimeoutError,
+    ExecutionCancelledError,
+)
 
 
 @dataclass
-class ExecutionConfig:
-    """Configuration for workflow execution."""
-    on_node_failure: str = "stop"  # "stop" | "continue"
-    max_parallel_nodes: int = 10
-    enable_retry: bool = True
-    persist_context: bool = False
-    timeout_seconds: int = 3600
+class NodeResult:
+    """Result of a single node execution."""
+    node_id: UUID
+    status: ExecutionStatus
+    output_data: dict[str, Any]
+    error_message: Optional[str] = None
+    duration_seconds: float = 0.0
 
 
-class DAGExecutor:
-    """Execute validated DAG workflows with parallel async execution.
+@dataclass
+class ExecutionResult:
+    """Result of workflow execution."""
+    workflow_execution_id: UUID
+    status: ExecutionStatus
+    output_data: dict[str, Any]
+    node_results: list[NodeResult]
+    duration_seconds: float
+    error_message: Optional[str] = None
 
-    TAG: [SPEC-011] [EXEC] [DAG]
 
-    This executor takes a validated workflow DAG and executes it
-    according to the topological sort provided by DAGValidator.
+class WorkflowExecutor:
+    """DAG-based workflow execution engine.
+
+    TAG: [SPEC-011] [EXECUTION] [ENGINE]
+
+    Features:
+    - Topological sort based execution order
+    - Parallel execution within levels (asyncio.TaskGroup)
+    - ExecutionContext for node data passing
+    - Error handling with retry and isolation
+    - Timeout and cancellation support
     """
 
     def __init__(
         self,
         db: AsyncSession,
-        tool_registry: ToolRegistry,
-        agent_manager: AgentManager,
+        max_parallel_nodes: int = 10,
     ):
         self.db = db
-        self.tools = tool_registry
-        self.agents = agent_manager
-        self.validator = DAGValidator(db)
+        self._semaphore = asyncio.Semaphore(max_parallel_nodes)
+        self._cancelled = False
+        self._validator = DAGValidator(db)
 
-    async def execute_workflow(
+    async def execute(
         self,
         workflow_id: UUID,
-        inputs: dict[str, Any] | None = None,
-        config: ExecutionConfig | None = None,
+        input_data: dict[str, Any],
+        trigger_type: TriggerType = TriggerType.MANUAL,
     ) -> ExecutionResult:
-        """Execute a complete workflow DAG.
+        """Execute a workflow.
 
-        TAG: [SPEC-011] [EXEC] [MAIN]
+        TAG: [SPEC-011] [EXECUTION]
 
-        Args:
-            workflow_id: Workflow to execute
-            inputs: Runtime input parameters
-            config: Execution configuration
-
-        Returns:
-            ExecutionResult with status, outputs, and node results
+        Steps:
+        1. Load workflow with nodes and edges
+        2. Validate DAG structure
+        3. Create WorkflowExecution record
+        4. Build DAG and topological sort
+        5. Execute nodes level by level
+        6. Return final result
         """
-        ...
+        start_time = datetime.now(UTC)
 
-    async def execute_node(
-        self,
-        node: Node,
-        context: ExecutionContext,
-    ) -> NodeExecutionResult:
-        """Execute a single node with its specific executor.
+        # 1. Load workflow
+        workflow = await self._load_workflow(workflow_id)
+        if not workflow:
+            raise ValueError(f"Workflow {workflow_id} not found")
 
-        TAG: [SPEC-011] [EXEC] [NODE]
+        # 2. Validate DAG
+        validation = await self._validator.validate_workflow(workflow_id)
+        if not validation.is_valid:
+            raise DAGValidationError(
+                message="Workflow validation failed",
+                error_code="VALIDATION_FAILED",
+                details={"errors": [e.model_dump() for e in validation.errors]},
+            )
 
-        Routes to appropriate executor based on node_type.
+        # 3. Create WorkflowExecution
+        execution = await WorkflowExecutionService.create(
+            self.db,
+            workflow_id=workflow_id,
+            input_data=input_data,
+            trigger_type=trigger_type,
+        )
+        await WorkflowExecutionService.start(self.db, execution.id)
+
+        # 4. Build DAG and get execution order
+        graph = self._build_graph(workflow)
+        levels = algorithms.topological_sort_levels(graph)
+
+        # 5. Create ExecutionContext
+        context = ExecutionContext(execution.id, input_data)
+
+        # 6. Execute level by level
+        node_results: list[NodeResult] = []
+        node_map = {node.id: node for node in workflow.nodes}
+        edge_map = self._build_edge_map(workflow.edges)
+
+        try:
+            for level_idx, level_node_ids in enumerate(levels):
+                level_nodes = [node_map[nid] for nid in level_node_ids]
+
+                await self._log(
+                    execution.id,
+                    LogLevel.INFO,
+                    f"Executing level {level_idx} with {len(level_nodes)} nodes",
+                )
+
+                level_results = await self._execute_level(
+                    level_nodes,
+                    context,
+                    edge_map,
+                    execution.id,
+                )
+                node_results.extend(level_results)
+
+                # Check for failures
+                failed = [r for r in level_results if r.status == ExecutionStatus.FAILED]
+                if failed:
+                    # Mark downstream nodes as blocked
+                    await self._mark_downstream_blocked(
+                        [r.node_id for r in failed],
+                        graph,
+                        levels[level_idx + 1:] if level_idx + 1 < len(levels) else [],
+                        node_map,
+                        execution.id,
+                    )
+
+            # 7. Complete workflow
+            final_outputs = await context.get_all_outputs()
+            await WorkflowExecutionService.complete(
+                self.db,
+                execution.id,
+                output_data=final_outputs,
+            )
+
+            duration = (datetime.now(UTC) - start_time).total_seconds()
+
+            return ExecutionResult(
+                workflow_execution_id=execution.id,
+                status=ExecutionStatus.COMPLETED,
+                output_data=final_outputs,
+                node_results=node_results,
+                duration_seconds=duration,
+            )
+
+        except Exception as e:
+            await WorkflowExecutionService.fail(
+                self.db,
+                execution.id,
+                error_message=str(e),
+            )
+            duration = (datetime.now(UTC) - start_time).total_seconds()
+
+            return ExecutionResult(
+                workflow_execution_id=execution.id,
+                status=ExecutionStatus.FAILED,
+                output_data={},
+                node_results=node_results,
+                duration_seconds=duration,
+                error_message=str(e),
+            )
+
+    async def cancel(self, execution_id: UUID) -> None:
+        """Cancel a running workflow execution.
+
+        TAG: [SPEC-011] [CANCELLATION]
         """
-        ...
+        self._cancelled = True
+        await WorkflowExecutionService.cancel(self.db, execution_id)
 
     async def _execute_level(
         self,
-        node_ids: list[str],
+        nodes: list[Node],
         context: ExecutionContext,
-    ) -> list[NodeExecutionResult]:
-        """Execute all nodes in a topological level in parallel.
+        edge_map: dict[UUID, list[Edge]],
+        execution_id: UUID,
+    ) -> list[NodeResult]:
+        """Execute all nodes in a level in parallel."""
+        if self._cancelled:
+            raise ExecutionCancelledError("Workflow execution was cancelled")
 
-        TAG: [SPEC-011] [EXEC] [PARALLEL]
+        async with asyncio.TaskGroup() as tg:
+            tasks = [
+                tg.create_task(
+                    self._execute_node_with_semaphore(
+                        node, context, edge_map, execution_id
+                    )
+                )
+                for node in nodes
+            ]
 
-        Uses asyncio.gather with semaphore for concurrency control.
-        """
-        ...
-```
+        return [task.result() for task in tasks]
 
-### SPEC-011-C: Execution Context Management
-
-```python
-# services/workflow/context.py
-from dataclasses import dataclass, field
-from datetime import datetime
-from uuid import UUID, uuid4
-from typing import Any
-
-
-@dataclass
-class ExecutionContext:
-    """Shared execution context for a workflow run.
-
-    TAG: [SPEC-011] [CONTEXT]
-
-    Provides isolation between executions while maintaining
-    shared state for all nodes within an execution.
-    """
-
-    execution_id: UUID = field(default_factory=uuid4)
-    workflow_id: UUID | None = None
-    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-
-    # Workflow-level variables (from workflow.variables)
-    variables: dict[str, Any] = field(default_factory=dict)
-
-    # Node outputs keyed by node_id
-    node_outputs: dict[str, dict[str, Any]] = field(default_factory=dict)
-
-    # Node errors keyed by node_id
-    node_errors: dict[str, dict[str, Any]] = field(default_factory=dict)
-
-    # Runtime inputs passed to execution
-    inputs: dict[str, Any] = field(default_factory=dict)
-
-    # Metadata (counts, timestamps, etc.)
-    metadata: dict[str, Any] = field(default_factory=dict)
-
-    def get_variable(self, path: str, default: Any = None) -> Any:
-        """Get variable value by dot-notation path.
-
-        Example: get_variable("config.rsi_period")
-        """
-        ...
-
-    def get_node_output(
+    async def _execute_node_with_semaphore(
         self,
-        node_id: str,
-        output_key: str | None = None
-    ) -> Any:
-        """Get output from a specific node.
+        node: Node,
+        context: ExecutionContext,
+        edge_map: dict[UUID, list[Edge]],
+        execution_id: UUID,
+    ) -> NodeResult:
+        """Execute node with semaphore for concurrency control."""
+        async with self._semaphore:
+            return await self._execute_node_with_retry(
+                node, context, edge_map, execution_id
+            )
 
-        If output_key is None, returns entire output dict.
-        """
-        ...
-
-    def set_node_output(
+    async def _execute_node_with_retry(
         self,
-        node_id: str,
-        outputs: dict[str, Any]
-    ) -> None:
-        """Store node outputs in context."""
-        ...
+        node: Node,
+        context: ExecutionContext,
+        edge_map: dict[UUID, list[Edge]],
+        execution_id: UUID,
+    ) -> NodeResult:
+        """Execute node with retry logic."""
+        max_retries = node.retry_config.get("max_retries", 3)
+        delay = node.retry_config.get("delay", 1)
 
-    def substitute_variables(
-        self,
-        template: str,
-        local_vars: dict[str, Any] | None = None
-    ) -> Any:
-        """Substitute variable references in template string.
+        # Create NodeExecution record
+        node_execution = await NodeExecutionService.create(
+            self.db,
+            workflow_execution_id=execution_id,
+            node_id=node.id,
+            execution_order=0,  # TODO: Calculate actual order
+        )
 
-        Supports: {{ variables.* }}, {{ nodes.*.outputs.* }}, {{ inputs.* }}
-        """
-        ...
-```
-
-### SPEC-011-D: Retry Logic
-
-```python
-# services/workflow/retry.py
-import asyncio
-from dataclasses import dataclass
-from datetime import datetime, timedelta
-from typing import Any, Callable
-
-
-@dataclass
-class RetryConfig:
-    """Retry configuration for node execution."""
-    max_retries: int = 3
-    initial_delay_seconds: float = 1.0
-    max_delay_seconds: float = 60.0
-    backoff_multiplier: float = 2.0
-    retry_on: list[str] | None = None  # None = all exceptions
-
-
-class RetryExecutor:
-    """Handle retry logic with exponential backoff.
-
-    TAG: [SPEC-011] [RETRY]
-    """
-
-    def __init__(self, config: RetryConfig):
-        self.config = config
-
-    async def execute_with_retry(
-        self,
-        func: Callable,
-        *args: Any,
-        **kwargs: Any,
-    ) -> Any:
-        """Execute function with retry logic.
-
-        TAG: [SPEC-011] [RETRY] [EXECUTE]
-
-        Applies exponential backoff between retries.
-        Only retries on configured exception types.
-        """
-        last_exception = None
-
-        for attempt in range(self.config.max_retries + 1):
+        for attempt in range(max_retries + 1):
             try:
-                return await func(*args, **kwargs)
+                result = await self._execute_node_with_timeout(
+                    node, context, edge_map, node_execution.id
+                )
+                return result
+
+            except NodeTimeoutError as e:
+                await NodeExecutionService.fail(
+                    self.db,
+                    node_execution.id,
+                    error_message=str(e),
+                )
+                return NodeResult(
+                    node_id=node.id,
+                    status=ExecutionStatus.FAILED,
+                    output_data={},
+                    error_message=str(e),
+                )
+
             except Exception as e:
-                last_exception = e
+                if attempt < max_retries:
+                    await NodeExecutionService.increment_retry(
+                        self.db, node_execution.id
+                    )
+                    await self._log(
+                        execution_id,
+                        LogLevel.WARN,
+                        f"Node {node.name} failed, retrying ({attempt + 1}/{max_retries})",
+                        node_execution.id,
+                    )
+                    await asyncio.sleep(delay * (2 ** attempt))
+                else:
+                    await NodeExecutionService.fail(
+                        self.db,
+                        node_execution.id,
+                        error_message=str(e),
+                    )
+                    return NodeResult(
+                        node_id=node.id,
+                        status=ExecutionStatus.FAILED,
+                        output_data={},
+                        error_message=str(e),
+                    )
 
-                # Check if we should retry this exception
-                if not self._should_retry(e, attempt):
-                    raise
-
-                # Wait before retry (exponential backoff)
-                if attempt < self.config.max_retries:
-                    delay = self._calculate_delay(attempt)
-                    await asyncio.sleep(delay)
-
-        # All retries exhausted
-        raise last_exception
-
-    def _should_retry(self, exception: Exception, attempt: int) -> bool:
-        """Check if exception should trigger retry."""
-        if attempt >= self.config.max_retries:
-            return False
-
-        if self.config.retry_on is None:
-            return True  # Retry all exceptions
-
-        exception_type = type(exception).__name__
-        return exception_type in self.config.retry_on
-
-    def _calculate_delay(self, attempt: int) -> float:
-        """Calculate delay with exponential backoff."""
-        delay = self.config.initial_delay_seconds * (
-            self.config.backoff_multiplier ** attempt
+        # Should not reach here
+        return NodeResult(
+            node_id=node.id,
+            status=ExecutionStatus.FAILED,
+            output_data={},
+            error_message="Unknown error",
         )
-        return min(delay, self.config.max_delay_seconds)
-```
 
-### SPEC-011-E: Node Executors
-
-```python
-# services/workflow/node_executors.py
-from abc import ABC, abstractmethod
-from typing import Any
-
-from app.services.workflow.context import ExecutionContext
-from app.services.workflow.retry import RetryExecutor
-from app.models.workflow import Node
-
-
-class BaseNodeExecutor(ABC):
-    """Base class for node type executors.
-
-    TAG: [SPEC-011] [NODE] [BASE]
-    """
-
-    def __init__(self, node: Node, context: ExecutionContext):
-        self.node = node
-        self.context = context
-
-    @abstractmethod
-    async def execute(self) -> dict[str, Any]:
-        """Execute the node and return outputs."""
-        pass
-
-
-class ToolNodeExecutor(BaseNodeExecutor):
-    """Execute tool nodes via ToolRegistry.
-
-    TAG: [SPEC-011] [NODE] [TOOL]
-    """
-
-    def __init__(
+    async def _execute_node_with_timeout(
         self,
         node: Node,
         context: ExecutionContext,
-        tool_registry: ToolRegistry,
-    ):
-        super().__init__(node, context)
-        self.tools = tool_registry
+        edge_map: dict[UUID, list[Edge]],
+        node_execution_id: UUID,
+    ) -> NodeResult:
+        """Execute node with timeout."""
+        start_time = datetime.now(UTC)
 
-    async def execute(self) -> dict[str, Any]:
-        """Execute tool with retry logic."""
-        tool = self.tools.get(self.node.config["tool_id"])
+        await NodeExecutionService.start(self.db, node_execution_id, {})
 
-        # Substitute variables in tool inputs
-        inputs = self._prepare_inputs()
+        try:
+            async with asyncio.timeout(node.timeout_seconds):
+                result = await self._execute_node(node, context, edge_map)
 
-        # Create retry executor
-        retry_config = RetryConfig(**self.node.retry_config)
-        retry_executor = RetryExecutor(retry_config)
+            await NodeExecutionService.complete(
+                self.db,
+                node_execution_id,
+                output_data=result.output_data,
+            )
 
-        # Execute with retry
-        async def _execute():
-            return await tool.execute(inputs)
+            return result
 
-        result = await retry_executor.execute_with_retry(_execute)
-        return {"output": result}
+        except asyncio.TimeoutError:
+            raise NodeTimeoutError(
+                f"Node {node.name} timed out after {node.timeout_seconds}s"
+            )
 
-
-class AgentNodeExecutor(BaseNodeExecutor):
-    """Execute agent nodes via AgentManager.
-
-    TAG: [SPEC-011] [NODE] [AGENT]
-    """
-
-    def __init__(
+    async def _execute_node(
         self,
         node: Node,
         context: ExecutionContext,
-        agent_manager: AgentManager,
-    ):
-        super().__init__(node, context)
-        self.agents = agent_manager
+        edge_map: dict[UUID, list[Edge]],
+    ) -> NodeResult:
+        """Execute a single node.
 
-    async def execute(self) -> dict[str, Any]:
-        """Execute agent with LLM call."""
-        agent = self.agents.get(self.node.config["agent_id"])
-
-        # Build prompt from template
-        prompt = self._build_prompt()
-
-        # Execute agent
-        response = await agent.execute(prompt)
-        return {"response": response}
-
-
-class ConditionNodeExecutor(BaseNodeExecutor):
-    """Evaluate condition nodes and determine output branch.
-
-    TAG: [SPEC-011] [NODE] [CONDITION]
-    """
-
-    async def execute(self) -> dict[str, Any]:
-        """Evaluate conditions and return selected branch."""
-        conditions = self.node.config.get("conditions", [])
-        inputs = self._get_inputs()
-
-        for condition in conditions:
-            if self._evaluate_condition(condition, inputs):
-                return {
-                    "selected_branch": condition["name"],
-                    "target_node": condition["target_node"],
-                }
-
-        # Default to else condition
-        return {"selected_branch": "default"}
-
-
-class AdapterNodeExecutor(BaseNodeExecutor):
-    """Execute adapter nodes for data transformation.
-
-    TAG: [SPEC-011] [NODE] [ADAPTER]
-    """
-
-    async def execute(self) -> dict[str, Any]:
-        """Apply data transformation."""
-        transformation = self.node.config.get("transformation")
-        inputs = self._get_inputs()
-
-        # Execute transformation (in sandboxed env)
-        result = self._apply_transformation(transformation, inputs)
-        return {"output": result}
-
-
-class AggregatorNodeExecutor(BaseNodeExecutor):
-    """Execute aggregator nodes for collecting outputs.
-
-    TAG: [SPEC-011] [NODE] [AGGREGATOR]
-    """
-
-    async def execute(self) -> dict[str, Any]:
-        """Aggregate outputs from multiple input nodes."""
-        strategy = self.node.config.get("strategy", "merge")
-
-        # Gather outputs from all incoming edges
-        inputs = self._get_inputs()
-
-        if strategy == "merge":
-            result = self._merge_outputs(inputs)
-        elif strategy == "concatenate":
-            result = self._concatenate_outputs(inputs)
-        # ... other strategies
-
-        return {"output": result}
-```
-
-### SPEC-011-F: Scheduler Integration
-
-```python
-# services/workflow/scheduler.py
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-from uuid import UUID
-from typing import Callable, Optional
-
-from app.services.workflow.executor import DAGExecutor
-
-
-class WorkflowScheduler:
-    """APScheduler wrapper for workflow scheduling.
-
-    TAG: [SPEC-011] [SCHEDULER]
-    """
-
-    def __init__(self, executor: DAGExecutor):
-        self.scheduler = AsyncIOScheduler()
-        self.executor = executor
-        self._jobs: dict[UUID, str] = {}
-
-    def start(self) -> None:
-        """Start the scheduler."""
-        self.scheduler.start()
-
-    def shutdown(self, wait: bool = True) -> None:
-        """Shutdown the scheduler."""
-        self.scheduler.shutdown(wait=wait)
-
-    def schedule_workflow(
-        self,
-        workflow_id: UUID,
-        cron: str,
-        timezone: str = "Asia/Seoul",
-        inputs: dict[str, Any] | None = None,
-    ) -> str:
-        """Schedule a workflow for cron-based execution.
-
-        TAG: [SPEC-011] [SCHEDULER] [SCHEDULE]
-
-        Args:
-            workflow_id: Workflow to schedule
-            cron: Cron expression (e.g., "30 9,15 * * 1-5")
-            timezone: Timezone for cron schedule
-            inputs: Default inputs for scheduled executions
-
-        Returns:
-            Job ID for the scheduled job
+        This is a placeholder that will be replaced by NodeProcessor (SPEC-012).
         """
-        trigger = CronTrigger.from_crontab(cron, timezone=timezone)
+        start_time = datetime.now(UTC)
 
-        async def _execute():
-            await self.executor.execute_workflow(workflow_id, inputs)
+        # Get input from predecessors
+        incoming_edges = [e for e in edge_map.get(node.id, [])
+                         if e.target_node_id == node.id]
+        input_data = await context.get_input(node, incoming_edges)
 
-        job = self.scheduler.add_job(
-            _execute,
-            trigger=trigger,
-            id=f"workflow-{workflow_id}",
-            name=f"Workflow {workflow_id}",
+        # Execute based on node type
+        # TODO: Delegate to NodeProcessor (SPEC-012)
+        output_data: dict[str, Any] = {}
+
+        if node.node_type == NodeType.TRIGGER:
+            # Trigger nodes pass through input data
+            output_data = input_data
+
+        elif node.node_type == NodeType.CONDITION:
+            # Evaluate condition and set result
+            # TODO: Implement condition evaluation
+            output_data = {"condition_result": True}
+
+        else:
+            # Other nodes: placeholder
+            output_data = {"processed": True, "input": input_data}
+
+        # Store output
+        await context.set_output(node.id, output_data)
+
+        duration = (datetime.now(UTC) - start_time).total_seconds()
+
+        return NodeResult(
+            node_id=node.id,
+            status=ExecutionStatus.COMPLETED,
+            output_data=output_data,
+            duration_seconds=duration,
         )
 
-        self._jobs[workflow_id] = job.id
-        return job.id
+    # Helper methods
 
-    def unschedule_workflow(self, workflow_id: UUID) -> None:
-        """Remove workflow from schedule."""
-        if workflow_id in self._jobs:
-            self.scheduler.remove_job(self._jobs[workflow_id])
-            del self._jobs[workflow_id]
-
-    def get_next_run_time(self, workflow_id: UUID) -> Optional[datetime]:
-        """Get next scheduled run time for workflow."""
-        if workflow_id in self._jobs:
-            job = self.scheduler.get_job(self._jobs[workflow_id])
-            return job.next_run_time if job else None
-        return None
-```
-
-### SPEC-011-G: Execution Schemas
-
-```python
-# schemas/execution.py
-from datetime import datetime
-from enum import Enum
-from typing import Any, Optional
-from uuid import UUID
-
-from pydantic import BaseModel, Field, ConfigDict
-
-
-class ExecutionStatus(str, Enum):
-    """Workflow execution status."""
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    PARTIAL = "partial"  # Some nodes failed
-    CANCELLED = "cancelled"
-
-
-class NodeExecutionStatus(str, Enum):
-    """Node execution status."""
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-    RETRYING = "retrying"
-
-
-class NodeExecutionResult(BaseModel):
-    """Result of a single node execution."""
-    model_config = ConfigDict(from_attributes=True)
-
-    node_id: UUID
-    status: NodeExecutionStatus
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    duration_ms: float = 0.0
-    outputs: dict[str, Any] = Field(default_factory=dict)
-    error: Optional[str] = None
-    retry_count: int = 0
-
-
-class ExecutionResult(BaseModel):
-    """Result of workflow execution."""
-    model_config = ConfigDict(from_attributes=True)
-
-    execution_id: UUID
-    workflow_id: UUID
-    status: ExecutionStatus
-    started_at: datetime
-    completed_at: Optional[datetime] = None
-    duration_ms: float = 0.0
-
-    # Node results
-    node_results: list[NodeExecutionResult] = Field(default_factory=list)
-
-    # Final outputs (from terminal nodes)
-    outputs: dict[str, Any] = Field(default_factory=dict)
-
-    # Error summary
-    errors: list[str] = Field(default_factory=list)
-
-    # Metadata
-    nodes_completed: int = 0
-    nodes_failed: int = 0
-    nodes_skipped: int = 0
-
-
-class ExecuteWorkflowRequest(BaseModel):
-    """Request to execute a workflow."""
-    inputs: dict[str, Any] = Field(default_factory=dict)
-    config: ExecutionConfig = None
-
-
-class ExecuteWorkflowResponse(BaseModel):
-    """Response from workflow execution."""
-    execution_id: UUID
-    status: ExecutionStatus
-    message: str
-```
-
-### SPEC-011-H: Execution API Endpoints
-
-```python
-# api/v1/executions.py
-from uuid import UUID
-from fastapi import APIRouter, HTTPException, status, BackgroundTasks
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.api.deps import DBSession, CurrentUser
-from app.schemas.execution import (
-    ExecuteWorkflowRequest,
-    ExecuteWorkflowResponse,
-    ExecutionResult,
-)
-from app.services.workflow.executor import DAGExecutor
-
-router = APIRouter(prefix="/executions", tags=["executions"])
-
-
-@router.post(
-    "/workflows/{workflow_id}",
-    response_model=ExecuteWorkflowResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Execute Workflow",
-    description="Execute a workflow immediately (on-demand).",
-)
-async def execute_workflow(
-    workflow_id: UUID,
-    request: ExecuteWorkflowRequest,
-    background_tasks: BackgroundTasks,
-    db: DBSession,
-    current_user: CurrentUser,
-) -> ExecuteWorkflowResponse:
-    """Execute workflow on-demand.
-
-    TAG: [SPEC-011] [API] [EXECUTE]
-
-    Starts workflow execution in background.
-    Returns immediately with execution_id.
-    """
-    executor = DAGExecutor(db)
-
-    # Generate execution ID
-    execution_id = await executor.create_execution(workflow_id, request.inputs)
-
-    # Schedule background execution
-    background_tasks.add_task(
-        executor.execute_workflow,
-        workflow_id,
-        request.inputs,
-        request.config,
-    )
-
-    return ExecuteWorkflowResponse(
-        execution_id=execution_id,
-        status="running",
-        message="Workflow execution started",
-    )
-
-
-@router.get(
-    "/{execution_id}",
-    response_model=ExecutionResult,
-    summary="Get Execution Status",
-    description="Get the current status and results of a workflow execution.",
-)
-async def get_execution(
-    execution_id: UUID,
-    db: DBSession,
-    current_user: CurrentUser,
-) -> ExecutionResult:
-    """Get execution status and results.
-
-    TAG: [SPEC-011] [API] [STATUS]
-    """
-    executor = DAGExecutor(db)
-    result = await executor.get_execution_result(execution_id)
-
-    if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Execution not found",
+    async def _load_workflow(self, workflow_id: UUID) -> Optional[Workflow]:
+        """Load workflow with nodes and edges."""
+        result = await self.db.execute(
+            select(Workflow)
+            .where(Workflow.id == workflow_id)
+            .where(Workflow.deleted_at.is_(None))
+            .options(
+                selectinload(Workflow.nodes),
+                selectinload(Workflow.edges),
+            )
         )
+        return result.scalar_one_or_none()
 
-    return result
+    def _build_graph(self, workflow: Workflow) -> Graph[UUID]:
+        """Build graph from workflow."""
+        graph = Graph[UUID]()
+        for node in workflow.nodes:
+            graph.add_node(node.id)
+        for edge in workflow.edges:
+            graph.add_edge(edge.source_node_id, edge.target_node_id)
+        return graph
 
+    def _build_edge_map(
+        self,
+        edges: list[Edge],
+    ) -> dict[UUID, list[Edge]]:
+        """Build edge lookup map."""
+        edge_map: dict[UUID, list[Edge]] = {}
+        for edge in edges:
+            if edge.target_node_id not in edge_map:
+                edge_map[edge.target_node_id] = []
+            edge_map[edge.target_node_id].append(edge)
+        return edge_map
 
-@router.post(
-    "/{execution_id}/cancel",
-    status_code=status.HTTP_200_OK,
-    summary="Cancel Execution",
-    description="Cancel a running workflow execution.",
-)
-async def cancel_execution(
-    execution_id: UUID,
-    db: DBSession,
-    current_user: CurrentUser,
-) -> dict[str, Any]:
-    """Cancel a running execution.
+    async def _mark_downstream_blocked(
+        self,
+        failed_node_ids: list[UUID],
+        graph: Graph[UUID],
+        remaining_levels: list[list[UUID]],
+        node_map: dict[UUID, Node],
+        execution_id: UUID,
+    ) -> None:
+        """Mark downstream nodes as blocked due to upstream failure."""
+        blocked = set()
+        for failed_id in failed_node_ids:
+            queue = list(graph.get_successors(failed_id))
+            while queue:
+                node_id = queue.pop(0)
+                if node_id not in blocked:
+                    blocked.add(node_id)
+                    queue.extend(graph.get_successors(node_id))
 
-    TAG: [SPEC-011] [API] [CANCEL]
+        for node_id in blocked:
+            await self._log(
+                execution_id,
+                LogLevel.WARN,
+                f"Node {node_map[node_id].name} blocked due to upstream failure",
+            )
+
+    async def _log(
+        self,
+        execution_id: UUID,
+        level: LogLevel,
+        message: str,
+        node_execution_id: Optional[UUID] = None,
+        data: Optional[dict] = None,
+    ) -> None:
+        """Log execution event."""
+        await ExecutionLogService.create(
+            self.db,
+            workflow_execution_id=execution_id,
+            node_execution_id=node_execution_id,
+            level=level,
+            message=message,
+            data=data,
+        )
+```
+
+### SPEC-011-D: Exception Definitions
+
+```python
+# Add to services/workflow/exceptions.py
+
+class ExecutionError(Exception):
+    """Base exception for execution errors.
+
+    TAG: [SPEC-011] [EXECUTION] [EXCEPTIONS]
     """
-    executor = DAGExecutor(db)
-    cancelled = await executor.cancel_execution(execution_id)
 
-    return {
-        "execution_id": execution_id,
-        "cancelled": cancelled,
-        "message": "Execution cancelled" if cancelled else "Execution not found or already completed",
-    }
+    def __init__(
+        self,
+        message: str,
+        node_id: Optional[UUID] = None,
+        details: Optional[dict[str, Any]] = None,
+    ):
+        super().__init__(message)
+        self.message = message
+        self.node_id = node_id
+        self.details = details or {}
+
+
+class NodeTimeoutError(ExecutionError):
+    """Raised when node execution exceeds timeout."""
+
+    def __init__(self, message: str, node_id: Optional[UUID] = None):
+        super().__init__(message, node_id)
+
+
+class NodeExecutionError(ExecutionError):
+    """Raised when node execution fails."""
+
+    def __init__(
+        self,
+        message: str,
+        node_id: UUID,
+        original_error: Optional[Exception] = None,
+    ):
+        super().__init__(message, node_id)
+        self.original_error = original_error
+
+
+class ExecutionCancelledError(ExecutionError):
+    """Raised when execution is cancelled."""
+
+    def __init__(self, message: str = "Execution was cancelled"):
+        super().__init__(message)
+
+
+class ConditionEvaluationError(ExecutionError):
+    """Raised when condition evaluation fails."""
+
+    def __init__(self, message: str, node_id: UUID, expression: str):
+        super().__init__(message, node_id, {"expression": expression})
 ```
 
 ---
@@ -1299,24 +1014,22 @@ async def cancel_execution(
 
 ### Technical Constraints
 
-- All execution functions must be async/await compatible
-- Must use topological sort from SPEC-010 for execution order
-- Must respect node timeout_seconds
-- Must use Pydantic v2 `model_config = ConfigDict(from_attributes=True)`
+- Python 3.12+ (asyncio.TaskGroup requires 3.11+)
+- SPEC-010 DAG Validator 의존
+- 기존 execution_service.py와 통합
+- Pydantic v2 `model_config = ConfigDict(from_attributes=True)`
 
 ### Performance Constraints
 
-- Parallel node execution limited by configurable semaphore (default: 10)
-- Total workflow execution timeout: 3600 seconds (1 hour) by default
-- Context size limited to 100MB per execution (configurable)
-- Memory cleanup after execution completion
+- 100개 노드 워크플로우 실행 시 오버헤드 < 500ms
+- 메모리 사용량: 그래프 크기의 3배 이하
+- 동시 실행 노드 기본 제한: 10개
 
 ### Security Constraints
 
-- Node execution sandboxed where possible
-- Input validation before node execution
-- No arbitrary code execution (adapter nodes use restricted eval)
-- Audit logging for all executions
+- 입력 데이터 검증
+- 조건 표현식 샌드박스 실행
+- 민감 데이터 로깅 마스킹
 
 ---
 
@@ -1325,18 +1038,17 @@ async def cancel_execution(
 ### Internal Dependencies
 
 - SPEC-001: Base models and mixins
-- SPEC-003: Workflow, Node, Edge models (execution targets)
-- SPEC-005: WorkflowExecution, NodeExecution models (tracking)
-- SPEC-009: ToolRegistry, AgentManager (node dependencies)
-- SPEC-010: DAGValidator, topological sort (execution ordering)
+- SPEC-003: Workflow, Node, Edge models
+- SPEC-005: WorkflowExecution, NodeExecution, ExecutionLog models
+- SPEC-010: DAG Validator (topological sort, cycle detection)
 
 ### External Dependencies
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| asyncio | builtin | Parallel async execution |
-| apscheduler | >=3.11.0 | Scheduled execution |
-| sqlalchemy[asyncio] | >=2.0.0 | Execution record storage |
+| fastapi | >=0.115.0 | API framework |
+| pydantic | >=2.10.0 | Schema validation |
+| sqlalchemy[asyncio] | >=2.0.0 | Database access |
 
 ---
 
@@ -1344,19 +1056,20 @@ async def cancel_execution(
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| Memory leak in long-running workflows | Medium | High | Context size limits, periodic cleanup |
-| Race conditions in parallel execution | Medium | Medium | Proper context locking |
-| Retry storms causing API throttling | Medium | High | Configurable backoff, max retries |
-| Orphaned executions on cancellation | Low | Medium | Cleanup tasks, timeout enforcement |
+| 노드 실행 무한 대기 | Medium | High | 타임아웃 및 취소 메커니즘 |
+| 메모리 누수 | Low | Medium | Context 정리, 약한 참조 |
+| 동시성 문제 | Medium | High | asyncio.Lock 사용 |
+| SPEC-010 미완성 | Low | High | 병렬 개발, 인터페이스 추상화 |
 
 ---
 
 ## Related SPECs
 
+- **SPEC-001**: Database Foundation Setup (base models)
 - **SPEC-003**: Workflow Domain Models (Workflow, Node, Edge)
-- **SPEC-005**: Execution Tracking Models (storage layer)
-- **SPEC-009**: Tool/Agent API Endpoints (ToolRegistry, AgentManager)
-- **SPEC-010**: DAG Validation Service (pre-execution validation)
+- **SPEC-005**: Execution Tracking Models (WorkflowExecution, NodeExecution)
+- **SPEC-010**: DAG Validation Service (topological sort, validation)
+- **SPEC-012**: Node Processor Framework (개별 노드 타입 처리)
 
 ---
 
@@ -1364,4 +1077,5 @@ async def cancel_execution(
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| 1.0.0 | 2026-01-16 | workflow-spec | Initial SPEC creation |
+| 1.1.0 | 2026-01-16 | workflow-tdd | WorkflowExecutor 구현 (REQ-011-001~005, 007~011), ExecutionContext 구현 (100% 커버리지), Execution 예외 클래스 구현 (100% 커버리지), REQ-011-006는 SPEC-012로 이관 |
+| 1.0.0 | 2026-01-15 | workflow-spec | Initial SPEC creation |

@@ -626,6 +626,32 @@ class TestNodeExecutionService:
             await NodeExecutionService.complete(db_session, node_exec.id)
 
     @pytest.mark.asyncio
+    async def test_complete_node_without_output_data(self, db_session):
+        """Test completing node execution without output_data preserves existing."""
+        node_exec = NodeExecution(
+            id=uuid4(),
+            workflow_execution_id=uuid4(),
+            node_id=uuid4(),
+            status=ExecutionStatus.RUNNING,
+            execution_order=0,
+            input_data={},
+            retry_count=0,
+            started_at=datetime.now(UTC),
+            created_at=datetime.now(UTC),
+            output_data={"existing": "output"},
+        )
+        db_session.add(node_exec)
+        await db_session.flush()
+
+        # Complete without output_data (None by default)
+        completed = await NodeExecutionService.complete(db_session, node_exec.id)
+
+        assert completed.status == ExecutionStatus.COMPLETED
+        assert completed.ended_at is not None
+        # output_data should be preserved when None is passed
+        assert completed.output_data == {"existing": "output"}
+
+    @pytest.mark.asyncio
     async def test_fail_node_execution_success(self, db_session):
         """Test failing a node execution."""
         node_exec = NodeExecution(
@@ -677,6 +703,32 @@ class TestNodeExecutionService:
 
         with pytest.raises(ValueError, match="Cannot fail node execution"):
             await NodeExecutionService.fail(db_session, node_exec.id, "Error")
+
+    @pytest.mark.asyncio
+    async def test_fail_node_without_traceback(self, db_session):
+        """Test failing node execution without traceback preserves None."""
+        node_exec = NodeExecution(
+            id=uuid4(),
+            workflow_execution_id=uuid4(),
+            node_id=uuid4(),
+            status=ExecutionStatus.RUNNING,
+            execution_order=0,
+            input_data={},
+            retry_count=0,
+            started_at=datetime.now(UTC),
+            created_at=datetime.now(UTC),
+        )
+        db_session.add(node_exec)
+        await db_session.flush()
+
+        error_msg = "API call failed"
+        # Fail without traceback (None by default)
+        failed = await NodeExecutionService.fail(db_session, node_exec.id, error_msg)
+
+        assert failed.status == ExecutionStatus.FAILED
+        assert failed.ended_at is not None
+        assert failed.error_message == error_msg
+        assert failed.error_traceback is None  # Should remain None
 
     @pytest.mark.asyncio
     async def test_skip_node_execution_success(self, db_session):

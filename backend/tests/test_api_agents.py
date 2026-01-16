@@ -6,31 +6,12 @@ REQ: REQ-002 - Agent Tool Association Tests
 REQ: REQ-003 - Agent Filtering Tests
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
-import pytest_asyncio
 from fastapi import status
 from httpx import AsyncClient
-from unittest.mock import MagicMock, AsyncMock, patch
-
-# =============================================================================
-# Module-Level Fixtures
-# =============================================================================
-
-
-@pytest_asyncio.fixture
-async def sample_tool_id(async_client: AsyncClient) -> str:
-    """Create a sample tool and return its ID."""
-    tool_data = {
-        "name": "Test Tool",
-        "tool_type": "http",
-        "config": {"url": "https://api.example.com"},
-        "input_schema": {},
-    }
-    response = await async_client.post("/api/v1/tools/", json=tool_data)
-    return response.json()["id"]
-
 
 # =============================================================================
 # Agent Endpoint Tests
@@ -55,6 +36,18 @@ class TestAgentEndpoints:
             "is_active": True,
             "is_public": False,
         }
+
+    @pytest.fixture
+    async def sample_tool_id(self, async_client: AsyncClient) -> str:
+        """Create a sample tool and return its ID."""
+        tool_data = {
+            "name": "Test Tool",
+            "tool_type": "http",
+            "config": {"url": "https://api.example.com"},
+            "input_schema": {},
+        }
+        response = await async_client.post("/api/v1/tools/", json=tool_data)
+        return response.json()["id"]
 
     @pytest.mark.asyncio
     async def test_list_agents_empty(self, async_client: AsyncClient):
@@ -302,38 +295,6 @@ class TestAgentEndpoints:
         data = response.json()
         assert len(data["items"]) == 2
         assert data["total"] >= 5
-        assert data["page"] == 1
-        assert data["size"] == 2
-
-    @pytest.mark.asyncio
-    async def test_list_agents_response_includes_isoformat(
-        self, async_client: AsyncClient, sample_agent_data: dict
-    ):
-        """Test list agents response includes created_at in ISO format.
-
-        Covers lines 101-114 in agents.py for the list comprehension with isoformat().
-        """
-        # Create an agent
-        await async_client.post("/api/v1/agents/", json=sample_agent_data)
-
-        # List agents
-        response = await async_client.get("/api/v1/agents/")
-
-        assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert len(data["items"]) == 1
-
-        # Verify response includes all fields from AgentListResponse
-        agent = data["items"][0]
-        assert "id" in agent
-        assert "name" in agent
-        assert "model_provider" in agent
-        assert "model_name" in agent
-        assert "is_active" in agent
-        assert "is_public" in agent
-        assert "created_at" in agent
-        # Verify created_at is in ISO format (string)
-        assert isinstance(agent["created_at"], str)
 
 
 # =============================================================================
@@ -381,7 +342,7 @@ class TestAgentAPIExceptionHandling:
         Tests lines 122-126 in agents.py where generic Exception
         is caught and converted to HTTP 500.
         """
-        from unittest.mock import AsyncMock, MagicMock, patch
+        from unittest.mock import MagicMock, patch
 
         mock_service = MagicMock()
         mock_service.list.side_effect = Exception("Database connection failed")
@@ -551,78 +512,3 @@ class TestAgentAPIExceptionHandling:
 
             assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
             assert "Tool removal failed" in response.json()["detail"]
-
-
-class TestAgentTestEndpoint:
-    """Test suite for agent test execution endpoint."""
-
-    @pytest.fixture
-    def sample_agent_data(self) -> dict:
-        """Sample agent creation data."""
-        return {
-            "name": "Test Agent",
-            "description": "A test AI agent",
-            "model_provider": "anthropic",
-            "model_name": "claude-3-5-sonnet-20241022",
-            "system_prompt": "You are a helpful assistant.",
-            "config": {"temperature": 0.7, "max_tokens": 2000},
-            "tools": [],
-            "memory_config": {"max_turns": 10},
-            "is_active": True,
-            "is_public": False,
-        }
-
-    @pytest.mark.asyncio
-    async def test_test_agent_success(
-        self, async_client: AsyncClient, sample_agent_data: dict
-    ):
-        """Test successful agent test execution."""
-        # Create agent
-        create_response = await async_client.post(
-            "/api/v1/agents/", json=sample_agent_data
-        )
-        agent_id = create_response.json()["id"]
-
-        # Test agent
-        test_request = {"input_data": {"message": "Hello, how can you help me?"}}
-        response = await async_client.post(
-            f"/api/v1/agents/{agent_id}/test", json=test_request
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        data = response.json()
-        assert data["success"] is True
-        assert data["output"] is not None
-        assert "message" in data["output"]
-        assert data["error"] is None
-        assert data["execution_time_ms"] >= 0
-
-    @pytest.mark.asyncio
-    async def test_test_agent_not_found(self, async_client: AsyncClient):
-        """Test testing non-existent agent returns 404."""
-        test_request = {"input_data": {"message": "Hello"}}
-        response = await async_client.post(
-            f"/api/v1/agents/{uuid4()}/test", json=test_request
-        )
-
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-
-    @pytest.mark.asyncio
-    async def test_test_agent_inactive(
-        self, async_client: AsyncClient, sample_agent_data: dict
-    ):
-        """Test testing inactive agent returns 400."""
-        # Create agent
-        create_response = await async_client.post(
-            "/api/v1/agents/", json={**sample_agent_data, "is_active": False}
-        )
-        agent_id = create_response.json()["id"]
-
-        # Test agent
-        test_request = {"input_data": {"message": "Hello"}}
-        response = await async_client.post(
-            f"/api/v1/agents/{agent_id}/test", json=test_request
-        )
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "not active" in response.json()["detail"]

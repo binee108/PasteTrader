@@ -98,6 +98,30 @@ class TestWorkflowService:
         assert result is None
 
     @pytest.mark.asyncio
+    async def test_get_workflow_includes_deleted(self, db_session, workflow_factory):
+        """Test get with include_deleted=True returns soft-deleted workflows."""
+        workflow = workflow_factory()
+        db_session.add(workflow)
+        await db_session.flush()
+
+        # Soft delete the workflow
+        await WorkflowService(db_session).delete(workflow.id)
+
+        # Without include_deleted, should return None
+        result_not_deleted = await WorkflowService(db_session).get(
+            workflow.id, include_deleted=False
+        )
+        assert result_not_deleted is None
+
+        # With include_deleted, should return the workflow
+        result_deleted = await WorkflowService(db_session).get(
+            workflow.id, include_deleted=True
+        )
+        assert result_deleted is not None
+        assert result_deleted.id == workflow.id
+        assert result_deleted.deleted_at is not None
+
+    @pytest.mark.asyncio
     async def test_get_with_nodes_success(
         self, db_session, workflow_factory, node_factory
     ):
@@ -129,6 +153,36 @@ class TestWorkflowService:
             await WorkflowService(db_session).get_with_nodes(uuid4())
 
     @pytest.mark.asyncio
+    async def test_get_with_nodes_includes_deleted(
+        self, db_session, workflow_factory, node_factory
+    ):
+        """Test get_with_nodes with include_deleted=True returns soft-deleted workflows."""
+        workflow = workflow_factory()
+        node1 = node_factory(workflow_id=workflow.id)
+        node2 = node_factory(workflow_id=workflow.id)
+
+        db_session.add_all([workflow, node1, node2])
+        await db_session.flush()
+
+        # Soft delete the workflow
+        await WorkflowService(db_session).delete(workflow.id)
+
+        # Without include_deleted, should raise error
+        with pytest.raises(WorkflowNotFoundError):
+            await WorkflowService(db_session).get_with_nodes(
+                workflow.id, include_deleted=False
+            )
+
+        # With include_deleted, should return the workflow with nodes
+        result = await WorkflowService(db_session).get_with_nodes(
+            workflow.id, include_deleted=True
+        )
+        assert result is not None
+        assert result.id == workflow.id
+        assert result.deleted_at is not None
+        assert len(result.nodes) == 2
+
+    @pytest.mark.asyncio
     async def test_list_workflows(self, db_session, workflow_factory):
         """Test listing workflows with pagination."""
         owner_id = uuid4()
@@ -150,6 +204,49 @@ class TestWorkflowService:
         assert len(active_workflows) == 1
 
     @pytest.mark.asyncio
+    async def test_list_workflows_with_skip_limit(self, db_session, workflow_factory):
+        """Test list with skip and limit parameters."""
+        owner_id = uuid4()
+        workflows = [
+            workflow_factory(owner_id=owner_id, name=f"Workflow {i}") for i in range(5)
+        ]
+
+        db_session.add_all(workflows)
+        await db_session.flush()
+
+        # Test pagination
+        page1 = await WorkflowService(db_session).list(owner_id, skip=0, limit=2)
+        page2 = await WorkflowService(db_session).list(owner_id, skip=2, limit=2)
+
+        assert len(page1) == 2
+        assert len(page2) == 2
+
+    @pytest.mark.asyncio
+    async def test_list_workflows_includes_deleted(self, db_session, workflow_factory):
+        """Test list with include_deleted=True returns soft-deleted workflows."""
+        owner_id = uuid4()
+        workflow1 = workflow_factory(owner_id=owner_id, deleted_at=None)
+        workflow2 = workflow_factory(owner_id=owner_id, deleted_at=None)
+
+        db_session.add_all([workflow1, workflow2])
+        await db_session.flush()
+
+        # Soft delete one workflow
+        await WorkflowService(db_session).delete(workflow1.id)
+
+        # Without include_deleted, should only return non-deleted
+        active_only = await WorkflowService(db_session).list(
+            owner_id, skip=0, limit=10, include_deleted=False
+        )
+        assert len(active_only) == 1
+
+        # With include_deleted, should return all
+        all_workflows = await WorkflowService(db_session).list(
+            owner_id, skip=0, limit=10, include_deleted=True
+        )
+        assert len(all_workflows) == 2
+
+    @pytest.mark.asyncio
     async def test_count_workflows(self, db_session, workflow_factory):
         """Test counting workflows."""
         owner_id = uuid4()
@@ -167,6 +264,31 @@ class TestWorkflowService:
         # Count active only
         active_count = await WorkflowService(db_session).count(owner_id, is_active=True)
         assert active_count == 1
+
+    @pytest.mark.asyncio
+    async def test_count_workflows_includes_deleted(self, db_session, workflow_factory):
+        """Test count with include_deleted=True includes soft-deleted workflows."""
+        owner_id = uuid4()
+        workflow1 = workflow_factory(owner_id=owner_id)
+        workflow2 = workflow_factory(owner_id=owner_id)
+
+        db_session.add_all([workflow1, workflow2])
+        await db_session.flush()
+
+        # Soft delete one workflow
+        await WorkflowService(db_session).delete(workflow1.id)
+
+        # Without include_deleted, should only count non-deleted
+        active_only = await WorkflowService(db_session).count(
+            owner_id, include_deleted=False
+        )
+        assert active_only == 1
+
+        # With include_deleted, should count all
+        all_count = await WorkflowService(db_session).count(
+            owner_id, include_deleted=True
+        )
+        assert all_count == 2
 
     @pytest.mark.asyncio
     async def test_update_workflow_success(self, db_session, workflow_factory):
@@ -232,6 +354,42 @@ class TestWorkflowService:
         assert updated.name == "Updated Name"
         assert updated.description == "Updated description"
         assert updated.version == 2  # Version should increment
+
+    @pytest.mark.asyncio
+    async def test_update_with_only_nonexistent_fields(
+        self, db_session, workflow_factory
+    ):
+        """Test update with only non-existent fields (hasattr False branch)."""
+        workflow = workflow_factory(version=1, name="Original")
+        db_session.add(workflow)
+        await db_session.flush()
+
+        # Create mock update data that returns non-existent fields
+        # Create mock update data with non-existent fields
+        class NonexistentFieldsUpdate:
+            version = 1
+
+            def model_dump(
+                self,
+                *,
+                mode: str = "python",
+                exclude=None,
+                exclude_unset: bool = True,
+                **kwargs,
+            ):
+                return {
+                    "non_existent_field": "value",
+                    "another_fake_field": 123,
+                }
+
+        update_data = NonexistentFieldsUpdate()
+
+        # The update should not raise an error, just skip non-existent fields
+        updated = await WorkflowService(db_session).update(workflow.id, update_data)
+
+        # Name should remain unchanged since no valid fields were updated
+        assert updated.name == "Original"
+        assert updated.version == 2
 
     @pytest.mark.asyncio
     async def test_delete_workflow_success(self, db_session, workflow_factory):
@@ -439,6 +597,34 @@ class TestNodeService:
 
         with pytest.raises(NodeNotFoundError):
             await NodeService(db_session).update(uuid4(), update_data)
+
+    @pytest.mark.asyncio
+    async def test_update_node_with_nonexistent_field(self, db_session, node_factory):
+        """Test node update with non-existent field (hasattr False branch)."""
+        node = node_factory(name="Original Name", position_x=50)
+        db_session.add(node)
+        await db_session.flush()
+
+        # Create mock update data with non-existent fields
+        class NonexistentNodeUpdate:
+            def model_dump(
+                self,
+                *,
+                mode: str = "python",
+                exclude=None,
+                exclude_unset: bool = True,
+                **kwargs,
+            ):
+                return {"non_existent_field": "value"}
+
+        update_data = NonexistentNodeUpdate()
+
+        # The update should skip non-existent fields
+        updated = await NodeService(db_session).update(node.id, update_data)
+
+        # Original values should remain unchanged
+        assert updated.name == "Original Name"
+        assert updated.position_x == 50
 
     @pytest.mark.asyncio
     async def test_delete_node_success(self, db_session, node_factory):
@@ -927,4 +1113,142 @@ class TestEdgeService:
             await EdgeService(db_session).create(
                 workflow.id,
                 EdgeCreate(source_node_id=node_e.id, target_node_id=node_a.id),
+            )
+
+    @pytest.mark.asyncio
+    async def test_dag_validation_diamond_pattern(
+        self, db_session, workflow_factory, node_factory
+    ):
+        """Test DAG validation with diamond pattern (A->B, A->C, B->D, C->D).
+
+        This tests the visited tracking in _has_cycle - node D should be
+        visited from both B and C paths but not cause a false cycle detection.
+        """
+        workflow = workflow_factory()
+        node_a = node_factory(workflow_id=workflow.id, name="A")
+        node_b = node_factory(workflow_id=workflow.id, name="B")
+        node_c = node_factory(workflow_id=workflow.id, name="C")
+        node_d = node_factory(workflow_id=workflow.id, name="D")
+
+        db_session.add_all([workflow, node_a, node_b, node_c, node_d])
+        await db_session.flush()
+
+        # Create diamond pattern: A->B, A->C, B->D, C->D
+        # When adding C->D, DFS from D should visit D (already in visited from B path)
+        # This tests the "if node in visited: return False" branch
+        await EdgeService(db_session).create(
+            workflow.id,
+            EdgeCreate(source_node_id=node_a.id, target_node_id=node_b.id),
+        )
+        await EdgeService(db_session).create(
+            workflow.id,
+            EdgeCreate(source_node_id=node_a.id, target_node_id=node_c.id),
+        )
+        await EdgeService(db_session).create(
+            workflow.id,
+            EdgeCreate(source_node_id=node_b.id, target_node_id=node_d.id),
+        )
+        # This should not raise an error - diamond pattern is valid
+        edge4 = await EdgeService(db_session).create(
+            workflow.id,
+            EdgeCreate(source_node_id=node_c.id, target_node_id=node_d.id),
+        )
+
+        assert edge4.id is not None
+
+        # Now try to create D->A which would create a cycle
+        with pytest.raises(DAGValidationError, match="cycle"):
+            await EdgeService(db_session).create(
+                workflow.id,
+                EdgeCreate(source_node_id=node_d.id, target_node_id=node_a.id),
+            )
+
+    @pytest.mark.asyncio
+    async def test_dag_validation_with_complex_dag(
+        self, db_session, workflow_factory, node_factory
+    ):
+        """Test DAG validation with complex graph that has shared nodes.
+
+        This creates a graph where during DFS traversal, the algorithm encounters
+        a node that was already visited, triggering the 'if node in visited' branch.
+        """
+        workflow = workflow_factory()
+        node_start = node_factory(workflow_id=workflow.id, name="Start")
+        node_a1 = node_factory(workflow_id=workflow.id, name="A1")
+        node_a2 = node_factory(workflow_id=workflow.id, name="A2")
+        node_b1 = node_factory(workflow_id=workflow.id, name="B1")
+        node_b2 = node_factory(workflow_id=workflow.id, name="B2")
+        node_shared = node_factory(workflow_id=workflow.id, name="Shared")
+        node_end = node_factory(workflow_id=workflow.id, name="End")
+
+        db_session.add_all(
+            [
+                workflow,
+                node_start,
+                node_a1,
+                node_a2,
+                node_b1,
+                node_b2,
+                node_shared,
+                node_end,
+            ]
+        )
+        await db_session.flush()
+
+        # Create a complex DAG with shared nodes:
+        # Start -> A1 -> Shared -> End
+        # Start -> A2 -> Shared
+        # A1 -> B1 -> Shared
+        # A2 -> B2 -> Shared
+        # This creates multiple paths to 'Shared' node
+
+        await EdgeService(db_session).create(
+            workflow.id,
+            EdgeCreate(source_node_id=node_start.id, target_node_id=node_a1.id),
+        )
+        await EdgeService(db_session).create(
+            workflow.id,
+            EdgeCreate(source_node_id=node_start.id, target_node_id=node_a2.id),
+        )
+        await EdgeService(db_session).create(
+            workflow.id,
+            EdgeCreate(source_node_id=node_a1.id, target_node_id=node_shared.id),
+        )
+        await EdgeService(db_session).create(
+            workflow.id,
+            EdgeCreate(source_node_id=node_a2.id, target_node_id=node_shared.id),
+        )
+        await EdgeService(db_session).create(
+            workflow.id,
+            EdgeCreate(source_node_id=node_a1.id, target_node_id=node_b1.id),
+        )
+        await EdgeService(db_session).create(
+            workflow.id,
+            EdgeCreate(source_node_id=node_a2.id, target_node_id=node_b2.id),
+        )
+        await EdgeService(db_session).create(
+            workflow.id,
+            EdgeCreate(source_node_id=node_b1.id, target_node_id=node_shared.id),
+        )
+
+        # Now add B2 -> Shared, which should trigger the visited check
+        # since Shared is already reachable through multiple paths
+        edge = await EdgeService(db_session).create(
+            workflow.id,
+            EdgeCreate(source_node_id=node_b2.id, target_node_id=node_shared.id),
+        )
+
+        assert edge.id is not None
+
+        # Now create Shared -> End
+        await EdgeService(db_session).create(
+            workflow.id,
+            EdgeCreate(source_node_id=node_shared.id, target_node_id=node_end.id),
+        )
+
+        # Try to create a cycle: End -> Start
+        with pytest.raises(DAGValidationError, match="cycle"):
+            await EdgeService(db_session).create(
+                workflow.id,
+                EdgeCreate(source_node_id=node_end.id, target_node_id=node_start.id),
             )

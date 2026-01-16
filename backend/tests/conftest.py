@@ -7,12 +7,14 @@ REQ: REQ-003 - Test Database Engine Fixture (SQLite In-Memory)
 REQ: REQ-004 - Test Data Fixtures (workflow, nodes, edges, executions)
 REQ: REQ-005 - Cleanup After Tests
 REQ: REQ-006 - Transaction Rollback for Isolated Tests
+REQ: REQ-010-018 - Validation Caching
 
 This module provides comprehensive pytest fixtures for integration testing
 including async database sessions with transaction rollback, sample data fixtures,
 and factory patterns for creating test models.
 """
 
+import os
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
 from typing import cast
@@ -66,6 +68,9 @@ def pytest_configure(config):
         "markers",
         "asyncio: marks tests as async (pytest-asyncio)",
     )
+    # Configure Redis URL for caching tests
+    # Use redis://localhost:6379/1 for testing (separate DB)
+    os.environ.setdefault("REDIS_URL", "redis://localhost:6379/1")
 
 
 # =============================================================================

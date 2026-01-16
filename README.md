@@ -9,31 +9,10 @@ PasteTrader는 워크플로우 기반 자동화 플랫폼으로, 사용자가 �
 ### 핵심 기능
 
 - 시각적 워크플로우 디자이너
-- 다양한 도구 통합 (HTTP, MCP, Python, Shell, Builtin)
-- LLM 기반 에이전트 실행 (Anthropic, OpenAI, GLM)
+- 다양한 도구 통합 (HTTP, MCP, Python, Shell)
+- LLM 기반 에이전트 실행
 - 실시간 실행 추적
 - 이벤트 기반 트리거
-
-### 도구 유형 (Tool Types)
-
-PasteTrader는 5가지 유형의 도구를 지원합니다:
-
-| 유형 | 설명 | 필수 설정 | 사용 예시 |
-|------|------|-----------|-----------|
-| `http` | HTTP/HTTPS API 호출 | url, method | 외부 API 연동 |
-| `mcp` | MCP 서버 호출 | server_url | 컨텍스트 인식 도구 |
-| `python` | Python 코드 실행 | code | 커스텀 계산 로직 |
-| `shell` | Shell 명령 실행 | command | 스크립트 실행 |
-| `builtin` | 내장 시스템 작업 | operation | 미리 정의된 작업 |
-
-### 에이전트-도구 연결 관리
-
-에이전트는 여러 도구를 조합하여 복잡한 작업을 수행할 수 있습니다:
-
-- **도구 추가**: `POST /api/v1/agents/{agent_id}/tools`
-- **도구 제거**: `DELETE /api/v1/agents/{agent_id}/tools/{tool_id}`
-- **다중 도구**: 하나의 에이전트가 최대 제한 없이 도구 사용 가능
-- **중복 방지**: 같은 도구 중복 연결 자동 차단
 
 ## 기술 스택
 
@@ -47,28 +26,6 @@ PasteTrader는 5가지 유형의 도구를 지원합니다:
 - **Pydantic 2.10**: 데이터 검증
 - **bcrypt**: 비밀번호 해싱
 - **python-jose**: JWT 토큰 처리
-
-### 인증 및 보안
-
-- **JWT 기반 인증**: JSON Web Token을 사용한 안전한 사용자 인증
-- **토큰 만료**: 7일 기본 만료 설정 (설정 가능)
-- **암호화**: AES-256-GCM을 사용한 민감 데이터 암호화
-- **비밀번호 해싱**: bcrypt 알고리즘 (cost factor: 12)
-
-**JWT 인증 설정:**
-- Algorithm: HS256 (HMAC-SHA256)
-- Default Expiration: 7 days (10080 minutes)
-- Token Claims: sub (user_id), exp (expiration)
-
-**인증 흐름:**
-```
-1. 사용자 로그인 → JWT 토큰 발급
-2. 클라이언트 → Authorization: Bearer <token> 헤더 포함
-3. API → 토큰 검증 및 사용자 식별
-4. 보호된 리소스 접근 허용
-```
-
-자세한 내용은 [Authentication Guide](docs/api/authentication.md)를 참고하세요.
 
 ### 프론트엔드
 
@@ -286,21 +243,8 @@ npm run dev
 
 ## 문서
 
-### API 문서
+### 데이터베이스 가이드
 
-- [Tool API Reference](docs/api/tools.md) - 도구 관리 API (7개 엔드포인트)
-- [Agent API Reference](docs/api/agents.md) - 에이전트 관리 API (8개 엔드포인트)
-- [Authentication Guide](docs/api/authentication.md) - JWT 인증 가이드
-
-### 아키텍처 문서
-
-- [Tool-Agent Registry](docs/architecture/tool-agent-registry.md) - 도구/에이전트 레지스트리 아키텍처
-- [JWT Auth Flow](docs/architecture/jwt-auth-flow.md) - JWT 인증 흐름
-
-### 데이터베이스 스키마
-
-- [Tool Schema](docs/database/schemas/tool-schema.md) - 도구 데이터 모델
-- [Agent Schema](docs/database/schemas/agent-schema.md) - 에이전트 데이터 모델
 - [모델 생성 가이드](docs/database/models.md)
 - [마이그레이션 가이드](docs/database/migrations.md)
 
@@ -314,6 +258,8 @@ npm run dev
 - [SPEC-006: Schedule Configuration Model](.moai/specs/SPEC-006/spec.md) - 구현 완료
 - [SPEC-007: Workflow API Endpoints](.moai/specs/SPEC-007/spec.md) - 구현 완료
 - [SPEC-009: Tool/Agent API Endpoints](.moai/specs/SPEC-009/spec.md) - 구현 완료
+- [SPEC-010: DAG Validation Service](.moai/specs/SPEC-010/spec.md) - 구현 완료
+- [SPEC-011: Workflow Execution Engine](.moai/specs/SPEC-011/SPEC.md) - 구현 진행 중
 
 ## 테스트
 
@@ -345,8 +291,11 @@ open htmlcov/index.html
 - [x] Phase 0: 데이터베이스 기반 구축 (SPEC-001, SPEC-002)
 - [x] Phase 1: 워크플로우 코어 모델 (SPEC-003, SPEC-004, SPEC-007)
 - [x] Phase 2: 실행 추적 모델 (SPEC-005)
-- [ ] Phase 3: API 파운데이션
-- [ ] Phase 4: 프론트엔드 개발
+- [x] Phase 3: API 파운데이션 (SPEC-007, SPEC-008, SPEC-009)
+- [ ] Phase 4: 워크플로우 엔진 (SPEC-010, SPEC-011 구현 진행 중)
+- [ ] Phase 5: LLM 통합
+- [ ] Phase 6: 콘텐츠 파싱
+- [ ] Phase 7: 프론트엔드 개발
 
 ### 완료된 SPEC
 
@@ -361,13 +310,18 @@ open htmlcov/index.html
   - 938개 테스트 통과, 89.41% 코드 커버리지
   - DAG 검증, 페이지네이션, 배치 작업 지원
 - **SPEC-009**: Tool/Agent API Endpoints (도구/에이전트 관리 API)
-  - 15개 RESTful API 엔드포인트 구현 (도구 7개, 에이전트 8개)
-  - JWT 기반 인증 시스템 (python-jose)
-  - 5가지 도구 유형 지원 (http, mcp, python, shell, builtin)
-  - 3개 LLM 제공자 지원 (Anthropic, OpenAI, GLM)
-  - 도구-에이전트 연결 관리 API
-  - 85.60% 테스트 커버리지
-  - bcrypt 기반 비밀번호 해싱
+  - 13개 RESTful API 엔드포인트 구현
+  - 28개 보안 테스트 통과, 100% 테스트 커버리지
+  - bcrypt 기반 비밀번호 해싱, 직접 보안 모듈 구현
+- **SPEC-010**: DAG Validation Service (DAG 검증 서비스)
+  - 4개 RESTful API 엔드포인트 구현
+  - 1,351개 테스트 통과, 89.79% 코드 커버리지
+  - 순환 감지, 위상 정렬, 검증기 그래프 구현
+- **SPEC-011**: Workflow Execution Engine (워크플로우 실행 엔진) - 구현 진행 중
+  - WorkflowExecutor 모듈: 317 lines, 71.56% 커버리지
+  - ExecutionContext 모듈: 157 lines, 100% 커버리지
+  - Execution 예외 클래스: 203 lines, 100% 커버리지
+  - 189개 테스트 전체 통과, REQ-011-006(조건 노드 분기)는 SPEC-012로 이관
 
 ## 연락처
 

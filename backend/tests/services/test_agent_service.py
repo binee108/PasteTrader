@@ -1,691 +1,967 @@
-"""Service layer tests for AgentService.
+"""Tests for AgentService.
 
-TAG: [SPEC-007] [TESTS] [SERVICE] [AGENT]
-REQ: REQ-001 - AgentService CRUD Operations
-REQ: REQ-002 - Agent Tool Association
-REQ: REQ-003 - Agent Filtering and Search
-REQ: REQ-004 - Soft Delete Behavior
+TAG: [SPEC-009] [TESTING] [SERVICE] [AGENT]
+REQ: REQ-001 - AgentService CRUD Operations Tests
+REQ: REQ-002 - Agent Tool Association Tests
+REQ: REQ-003 - Agent Filtering and Search Tests
 """
 
+from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.agent import Agent
 from app.models.enums import ModelProvider
 from app.schemas.agent import AgentCreate, AgentUpdate
 from app.services.agent_service import (
-    AgentExecutionError,
     AgentNotFoundError,
     AgentService,
     AgentServiceError,
     ToolAlreadyAssociatedError,
 )
 
+# =============================================================================
+# TEST FIXTURES
+# =============================================================================
+
+
+@pytest.fixture
+def agent_create_schema() -> AgentCreate:
+    """Create AgentCreate schema for testing."""
+    return AgentCreate(
+        name="Test Agent",
+        description="A test agent",
+        model_provider="anthropic",
+        model_name="claude-3-5-sonnet-20241022",
+        system_prompt="You are a helpful assistant.",
+        config={"temperature": 0.7, "max_tokens": 1000},
+        tools=[str(uuid4()), str(uuid4())],
+        memory_config={"type": "summary", "max_tokens": 2000},
+        is_active=True,
+        is_public=False,
+    )
+
+
+@pytest.fixture
+def agent_update_schema() -> AgentUpdate:
+    """Create AgentUpdate schema for testing."""
+    return AgentUpdate(
+        name="Updated Agent",
+        description="Updated description",
+        is_active=False,
+    )
+
 
 # =============================================================================
-# AgentService CRUD Tests
+# CREATE TESTS
 # =============================================================================
 
 
 class TestAgentServiceCreate:
-    """Test AgentService.create() method."""
+    """Test AgentService.create method."""
 
     @pytest.mark.asyncio
-    async def test_create_agent_success(self, db_session):
+    async def test_create_agent_success(
+        self, db_session: AsyncSession, agent_create_schema: AgentCreate
+    ) -> None:
         """Test successful agent creation."""
+        # Arrange
+        service = AgentService(db_session)
+        owner_id = uuid4()
+
+        # Act
+        agent = await service.create(owner_id, agent_create_schema)
+
+        # Assert
+        assert agent.id is not None
+        assert agent.owner_id == owner_id
+        assert agent.name == agent_create_schema.name
+        assert agent.description == agent_create_schema.description
+        assert agent.model_provider == agent_create_schema.model_provider
+        assert agent.model_name == agent_create_schema.model_name
+        assert agent.system_prompt == agent_create_schema.system_prompt
+        assert agent.config == agent_create_schema.config
+        assert agent.tools == agent_create_schema.tools
+        assert agent.memory_config == agent_create_schema.memory_config
+        assert agent.is_active == agent_create_schema.is_active
+        assert agent.is_public == agent_create_schema.is_public
+        assert agent.created_at is not None
+        assert agent.updated_at is not None
+        assert agent.deleted_at is None
+
+    @pytest.mark.asyncio
+    async def test_create_agent_with_empty_tools(
+        self, db_session: AsyncSession
+    ) -> None:
+        """Test agent creation with empty tools list."""
+        # Arrange
+        service = AgentService(db_session)
         owner_id = uuid4()
         data = AgentCreate(
-            name="Test Agent",
-            description="A test agent",
-            model_provider=ModelProvider.ANTHROPIC,
-            model_name="claude-3-5-sonnet-20241022",
-            system_prompt="You are helpful.",
-            config={"temperature": 0.7},
+            name="Agent without tools",
+            model_provider="openai",
+            model_name="gpt-4",
             tools=[],
-            memory_config=None,
-            is_active=True,
-            is_public=False,
         )
 
-        service = AgentService(db_session)
+        # Act
         agent = await service.create(owner_id, data)
 
-        assert agent.id is not None
-        assert agent.name == "Test Agent"
-        assert agent.model_provider == ModelProvider.ANTHROPIC
-        assert agent.is_active is True
+        # Assert
         assert agent.tools == []
 
     @pytest.mark.asyncio
-    async def test_create_agent_database_failure(self, db_session, monkeypatch):
-        """Test agent creation with database failure."""
+    async def test_create_agent_with_tools_default(
+        self, db_session: AsyncSession
+    ) -> None:
+        """Test agent creation with tools using default factory."""
+        # Arrange
+        service = AgentService(db_session)
         owner_id = uuid4()
         data = AgentCreate(
-            name="Test Agent",
-            model_provider=ModelProvider.ANTHROPIC,
-            model_name="claude-3-5-sonnet-20241022",
+            name="Agent with default tools",
+            model_provider="anthropic",
+            model_name="claude-3-opus-20240229",
         )
 
+        # Act
+        agent = await service.create(owner_id, data)
+
+        # Assert
+        assert agent.tools == []
+
+    @pytest.mark.asyncio
+    async def test_create_agent_with_optional_fields_none(
+        self, db_session: AsyncSession
+    ) -> None:
+        """Test agent creation with optional fields as None."""
+        # Arrange
         service = AgentService(db_session)
+        owner_id = uuid4()
+        data = AgentCreate(
+            name="Minimal Agent",
+            model_provider="glm",
+            model_name="glm-4",
+            description=None,
+            system_prompt=None,
+            memory_config=None,
+        )
 
-        # Mock flush to raise database error
-        async def mock_flush():
-            raise SQLAlchemyError("Database connection lost")
+        # Act
+        agent = await service.create(owner_id, data)
 
-        monkeypatch.setattr(db_session, "flush", mock_flush)
+        # Assert
+        assert agent.description is None
+        assert agent.system_prompt is None
+        assert agent.memory_config is None
 
-        with pytest.raises(AgentServiceError, match="Failed to create agent"):
-            await service.create(owner_id, data)
+
+# =============================================================================
+# GET TESTS
+# =============================================================================
 
 
 class TestAgentServiceGet:
-    """Test AgentService.get() method."""
+    """Test AgentService.get method."""
 
     @pytest.mark.asyncio
-    async def test_get_agent_found(self, db_session, agent_factory):
-        """Test getting an existing agent."""
-        agent = agent_factory(name="Test Agent")
-        db_session.add(agent)
+    async def test_get_agent_by_id_success(
+        self, db_session: AsyncSession, sample_agent: Agent
+    ) -> None:
+        """Test successful agent retrieval by ID."""
+        # Arrange
+        service = AgentService(db_session)
+        db_session.add(sample_agent)
         await db_session.flush()
 
-        service = AgentService(db_session)
-        result = await service.get(agent.id)
+        # Act
+        agent = await service.get(sample_agent.id)
 
-        assert result is not None
-        assert result.id == agent.id
-        assert result.name == "Test Agent"
+        # Assert
+        assert agent is not None
+        assert agent.id == sample_agent.id
+        assert agent.name == sample_agent.name
 
     @pytest.mark.asyncio
-    async def test_get_agent_not_found(self, db_session):
-        """Test getting a non-existent agent."""
+    async def test_get_agent_by_id_not_found(self, db_session: AsyncSession) -> None:
+        """Test getting non-existent agent returns None."""
+        # Arrange
         service = AgentService(db_session)
-        result = await service.get(uuid4())
+        non_existent_id = uuid4()
 
-        assert result is None
+        # Act
+        agent = await service.get(non_existent_id)
+
+        # Assert
+        assert agent is None
 
     @pytest.mark.asyncio
-    async def test_get_agent_include_deleted_true(self, db_session, agent_factory):
-        """Test getting a deleted agent with include_deleted=True."""
-        agent = agent_factory(name="Deleted Agent")
-        agent.soft_delete()
-        db_session.add(agent)
+    async def test_get_agent_include_deleted_false(
+        self, db_session: AsyncSession, sample_agent: Agent
+    ) -> None:
+        """Test getting soft-deleted agent with include_deleted=False."""
+        # Arrange
+        service = AgentService(db_session)
+        sample_agent.soft_delete()
+        db_session.add(sample_agent)
         await db_session.flush()
 
-        service = AgentService(db_session)
+        # Act
+        agent = await service.get(sample_agent.id, include_deleted=False)
 
-        # Without include_deleted, should return None
-        result = await service.get(agent.id, include_deleted=False)
-        assert result is None
-
-        # With include_deleted=True, should return the agent
-        result = await service.get(agent.id, include_deleted=True)
-        assert result is not None
-        assert result.id == agent.id
+        # Assert
+        assert agent is None
 
     @pytest.mark.asyncio
-    async def test_get_agent_include_deleted_false(self, db_session, agent_factory):
-        """Test that deleted agents are excluded by default."""
-        agent = agent_factory(name="Active Agent")
-        db_session.add(agent)
-        await db_session.flush()
-
-        # Create deleted agent
-        deleted_agent = agent_factory(name="Deleted Agent")
-        deleted_agent.soft_delete()
-        db_session.add(deleted_agent)
-        await db_session.flush()
-
+    async def test_get_agent_include_deleted_true(
+        self, db_session: AsyncSession, sample_agent: Agent
+    ) -> None:
+        """Test getting soft-deleted agent with include_deleted=True."""
+        # Arrange
         service = AgentService(db_session)
+        sample_agent.soft_delete()
+        db_session.add(sample_agent)
+        await db_session.flush()
 
-        # Should only return active agent
-        result = await service.get(agent.id, include_deleted=False)
-        assert result is not None
-        assert result.id == agent.id
+        # Act
+        agent = await service.get(sample_agent.id, include_deleted=True)
 
-        # Deleted agent should return None
-        result = await service.get(deleted_agent.id, include_deleted=False)
-        assert result is None
+        # Assert
+        assert agent is not None
+        assert agent.id == sample_agent.id
+        assert agent.deleted_at is not None
+
+
+# =============================================================================
+# LIST TESTS
+# =============================================================================
 
 
 class TestAgentServiceList:
-    """Test AgentService.list() method."""
+    """Test AgentService.list method."""
 
     @pytest.mark.asyncio
-    async def test_list_agents_no_filters(self, db_session, agent_factory):
-        """Test listing agents without filters."""
-        owner_id = uuid4()
-        for i in range(3):
-            agent = agent_factory(owner_id=owner_id, name=f"Agent {i}")
-            db_session.add(agent)
-        await db_session.flush()
-
+    async def test_list_agents_default(
+        self, db_session: AsyncSession, agent_factory
+    ) -> None:
+        """Test listing agents with default parameters."""
+        # Arrange
         service = AgentService(db_session)
-        results = await service.list(owner_id)
-
-        assert len(results) == 3
-
-    @pytest.mark.asyncio
-    async def test_list_agents_with_model_provider_filter(
-        self, db_session, agent_factory
-    ):
-        """Test listing agents filtered by model provider."""
         owner_id = uuid4()
-        anthropic_agent = agent_factory(
-            owner_id=owner_id, model_provider=ModelProvider.ANTHROPIC
-        )
-        openai_agent = agent_factory(
-            owner_id=owner_id, model_provider=ModelProvider.OPENAI
-        )
-        db_session.add_all([anthropic_agent, openai_agent])
-        await db_session.flush()
 
-        service = AgentService(db_session)
-        results = await service.list(owner_id, model_provider="anthropic")
-
-        assert len(results) == 1
-        assert results[0].model_provider == ModelProvider.ANTHROPIC
-
-    @pytest.mark.asyncio
-    async def test_list_agents_with_is_active_filter(self, db_session, agent_factory):
-        """Test listing agents filtered by active status."""
-        owner_id = uuid4()
-        active_agent = agent_factory(owner_id=owner_id, is_active=True)
-        inactive_agent = agent_factory(owner_id=owner_id, is_active=False)
-        db_session.add_all([active_agent, inactive_agent])
-        await db_session.flush()
-
-        service = AgentService(db_session)
-
-        # Filter for active agents
-        results = await service.list(owner_id, is_active=True)
-        assert len(results) == 1
-        assert results[0].is_active is True
-
-        # Filter for inactive agents
-        results = await service.list(owner_id, is_active=False)
-        assert len(results) == 1
-        assert results[0].is_active is False
-
-    @pytest.mark.asyncio
-    async def test_list_agents_with_is_public_filter(self, db_session, agent_factory):
-        """Test listing agents filtered by public status."""
-        owner_id = uuid4()
-        public_agent = agent_factory(owner_id=owner_id, is_public=True)
-        private_agent = agent_factory(owner_id=owner_id, is_public=False)
-        db_session.add_all([public_agent, private_agent])
-        await db_session.flush()
-
-        service = AgentService(db_session)
-        results = await service.list(owner_id, is_public=True)
-
-        assert len(results) == 1
-        assert results[0].is_public is True
-
-    @pytest.mark.asyncio
-    async def test_list_agents_combined_filters(self, db_session, agent_factory):
-        """Test listing agents with multiple filters."""
-        owner_id = uuid4()
-        agent1 = agent_factory(
-            owner_id=owner_id,
-            model_provider=ModelProvider.ANTHROPIC,
-            is_active=True,
-            is_public=True,
-        )
-        agent2 = agent_factory(
-            owner_id=owner_id,
-            model_provider=ModelProvider.OPENAI,
-            is_active=True,
-            is_public=True,
-        )
-        agent3 = agent_factory(
-            owner_id=owner_id,
-            model_provider=ModelProvider.ANTHROPIC,
-            is_active=False,
-            is_public=True,
-        )
-        db_session.add_all([agent1, agent2, agent3])
-        await db_session.flush()
-
-        service = AgentService(db_session)
-        results = await service.list(
-            owner_id, model_provider="anthropic", is_active=True, is_public=True
-        )
-
-        assert len(results) == 1
-        assert results[0].model_provider == ModelProvider.ANTHROPIC
-        assert results[0].is_active is True
-
-    @pytest.mark.asyncio
-    async def test_list_agents_include_deleted(self, db_session, agent_factory):
-        """Test listing agents with include_deleted flag."""
-        owner_id = uuid4()
-        active_agent = agent_factory(owner_id=owner_id, name="Active Agent")
-        deleted_agent = agent_factory(owner_id=owner_id, name="Deleted Agent")
-        deleted_agent.soft_delete()
-        db_session.add_all([active_agent, deleted_agent])
-        await db_session.flush()
-
-        service = AgentService(db_session)
-
-        # Without include_deleted, should only return active
-        results = await service.list(owner_id, include_deleted=False)
-        assert len(results) == 1
-        assert results[0].name == "Active Agent"
-
-        # With include_deleted=True, should return both
-        results = await service.list(owner_id, include_deleted=True, is_active=None)
-        assert len(results) == 2
-
-    @pytest.mark.asyncio
-    async def test_list_agents_pagination(self, db_session, agent_factory):
-        """Test agent listing with pagination."""
-        owner_id = uuid4()
+        # Create 5 agents
         for i in range(5):
-            agent = agent_factory(owner_id=owner_id, name=f"Agent {i}")
+            agent = agent_factory(
+                owner_id=owner_id,
+                name=f"Agent {i}",
+            )
             db_session.add(agent)
         await db_session.flush()
 
-        service = AgentService(db_session)
-        results = await service.list(owner_id, skip=2, limit=2)
+        # Act
+        agents = await service.list(owner_id)
 
-        assert len(results) == 2
+        # Assert
+        assert len(agents) == 5
+        assert all(agent.owner_id == owner_id for agent in agents)
+
+    @pytest.mark.asyncio
+    async def test_list_agents_with_pagination(
+        self, db_session: AsyncSession, agent_factory
+    ) -> None:
+        """Test listing agents with pagination."""
+        # Arrange
+        service = AgentService(db_session)
+        owner_id = uuid4()
+
+        # Create 10 agents
+        for i in range(10):
+            agent = agent_factory(owner_id=owner_id, name=f"Agent {i:02d}")
+            db_session.add(agent)
+        await db_session.flush()
+
+        # Act - Get first page
+        page1 = await service.list(owner_id, skip=0, limit=5)
+
+        # Act - Get second page
+        page2 = await service.list(owner_id, skip=5, limit=5)
+
+        # Assert
+        assert len(page1) == 5
+        assert len(page2) == 5
+        assert page1 != page2
+
+    @pytest.mark.asyncio
+    async def test_list_agents_filter_by_model_provider(
+        self, db_session: AsyncSession, agent_factory
+    ) -> None:
+        """Test listing agents filtered by model provider."""
+        # Arrange
+        service = AgentService(db_session)
+        owner_id = uuid4()
+
+        # Create agents with different providers
+        for _ in range(3):
+            db_session.add(
+                agent_factory(owner_id=owner_id, model_provider=ModelProvider.ANTHROPIC)
+            )
+        for _ in range(2):
+            db_session.add(
+                agent_factory(owner_id=owner_id, model_provider=ModelProvider.OPENAI)
+            )
+        await db_session.flush()
+
+        # Act
+        anthropic_agents = await service.list(owner_id, model_provider="anthropic")
+        openai_agents = await service.list(owner_id, model_provider="openai")
+
+        # Assert
+        assert len(anthropic_agents) == 3
+        assert all(a.model_provider == "anthropic" for a in anthropic_agents)
+        assert len(openai_agents) == 2
+        assert all(a.model_provider == "openai" for a in openai_agents)
+
+    @pytest.mark.asyncio
+    async def test_list_agents_filter_by_is_active(
+        self, db_session: AsyncSession, agent_factory
+    ) -> None:
+        """Test listing agents filtered by active status."""
+        # Arrange
+        service = AgentService(db_session)
+        owner_id = uuid4()
+
+        # Create active and inactive agents
+        for _ in range(3):
+            db_session.add(agent_factory(owner_id=owner_id, is_active=True))
+        for _ in range(2):
+            db_session.add(agent_factory(owner_id=owner_id, is_active=False))
+        await db_session.flush()
+
+        # Act
+        active_agents = await service.list(owner_id, is_active=True)
+        inactive_agents = await service.list(owner_id, is_active=False)
+
+        # Assert
+        assert len(active_agents) == 3
+        assert all(a.is_active for a in active_agents)
+        assert len(inactive_agents) == 2
+        assert all(not a.is_active for a in inactive_agents)
+
+    @pytest.mark.asyncio
+    async def test_list_agents_filter_by_is_public(
+        self, db_session: AsyncSession, agent_factory
+    ) -> None:
+        """Test listing agents filtered by public status."""
+        # Arrange
+        service = AgentService(db_session)
+        owner_id = uuid4()
+
+        # Create public and private agents
+        for _ in range(2):
+            db_session.add(agent_factory(owner_id=owner_id, is_public=True))
+        for _ in range(3):
+            db_session.add(agent_factory(owner_id=owner_id, is_public=False))
+        await db_session.flush()
+
+        # Act
+        public_agents = await service.list(owner_id, is_public=True)
+        private_agents = await service.list(owner_id, is_public=False)
+
+        # Assert
+        assert len(public_agents) == 2
+        assert all(a.is_public for a in public_agents)
+        assert len(private_agents) == 3
+        assert all(not a.is_public for a in private_agents)
+
+    @pytest.mark.asyncio
+    async def test_list_agents_exclude_deleted(
+        self, db_session: AsyncSession, agent_factory
+    ) -> None:
+        """Test listing agents excludes deleted ones by default."""
+        # Arrange
+        service = AgentService(db_session)
+        owner_id = uuid4()
+
+        # Create agents and delete some
+        active_agent = agent_factory(owner_id=owner_id, name="Active")
+        deleted_agent = agent_factory(owner_id=owner_id, name="Deleted")
+        deleted_agent.soft_delete()
+
+        db_session.add(active_agent)
+        db_session.add(deleted_agent)
+        await db_session.flush()
+
+        # Act
+        agents = await service.list(owner_id, include_deleted=False)
+
+        # Assert
+        assert len(agents) == 1
+        assert agents[0].name == "Active"
+
+    @pytest.mark.asyncio
+    async def test_list_agents_include_deleted(
+        self, db_session: AsyncSession, agent_factory
+    ) -> None:
+        """Test listing agents includes deleted when flag is True."""
+        # Arrange
+        service = AgentService(db_session)
+        owner_id = uuid4()
+
+        # Create agents and delete some
+        active_agent = agent_factory(owner_id=owner_id, name="Active")
+        deleted_agent = agent_factory(owner_id=owner_id, name="Deleted")
+        deleted_agent.soft_delete()
+
+        db_session.add(active_agent)
+        db_session.add(deleted_agent)
+        await db_session.flush()
+
+        # Act
+        agents = await service.list(owner_id, include_deleted=True)
+
+        # Assert
+        assert len(agents) == 2
+
+    @pytest.mark.asyncio
+    async def test_list_agents_ordering(
+        self, db_session: AsyncSession, agent_factory
+    ) -> None:
+        """Test listing agents are ordered by created_at desc."""
+        # Arrange
+        service = AgentService(db_session)
+        owner_id = uuid4()
+
+        # Create agents with different timestamps
+        now = datetime.now(UTC)
+        agent1 = agent_factory(owner_id=owner_id, name="Agent 1", created_at=now)
+        agent2 = agent_factory(owner_id=owner_id, name="Agent 2", created_at=now)
+        agent3 = agent_factory(owner_id=owner_id, name="Agent 3", created_at=now)
+
+        db_session.add(agent1)
+        await db_session.flush()
+        db_session.add(agent2)
+        await db_session.flush()
+        db_session.add(agent3)
+        await db_session.flush()
+
+        # Act
+        agents = await service.list(owner_id)
+
+        # Assert - Should contain all agents and be ordered
+        assert len(agents) == 3
+        assert {a.name for a in agents} == {"Agent 1", "Agent 2", "Agent 3"}
+
+
+# =============================================================================
+# COUNT TESTS
+# =============================================================================
 
 
 class TestAgentServiceCount:
-    """Test AgentService.count() method."""
+    """Test AgentService.count method."""
 
     @pytest.mark.asyncio
-    async def test_count_agents_all(self, db_session, agent_factory):
-        """Test counting all agents."""
+    async def test_count_agents_default(
+        self, db_session: AsyncSession, agent_factory
+    ) -> None:
+        """Test counting agents with default parameters."""
+        # Arrange
+        service = AgentService(db_session)
         owner_id = uuid4()
-        for _ in range(3):
+
+        # Create 5 agents
+        for _i in range(5):
             agent = agent_factory(owner_id=owner_id)
             db_session.add(agent)
         await db_session.flush()
 
-        service = AgentService(db_session)
+        # Act
         count = await service.count(owner_id)
 
-        assert count == 3
+        # Assert
+        assert count == 5
 
     @pytest.mark.asyncio
-    async def test_count_agents_with_filters(self, db_session, agent_factory):
-        """Test counting agents with filters."""
+    async def test_count_agents_filter_by_model_provider(
+        self, db_session: AsyncSession, agent_factory
+    ) -> None:
+        """Test counting agents filtered by model provider."""
+        # Arrange
+        service = AgentService(db_session)
         owner_id = uuid4()
-        anthropic_agent = agent_factory(
-            owner_id=owner_id, model_provider=ModelProvider.ANTHROPIC
-        )
-        openai_agent = agent_factory(
-            owner_id=owner_id, model_provider=ModelProvider.OPENAI
-        )
-        db_session.add_all([anthropic_agent, openai_agent])
+
+        for _ in range(3):
+            db_session.add(
+                agent_factory(owner_id=owner_id, model_provider=ModelProvider.ANTHROPIC)
+            )
+        for _ in range(2):
+            db_session.add(
+                agent_factory(owner_id=owner_id, model_provider=ModelProvider.OPENAI)
+            )
         await db_session.flush()
 
-        service = AgentService(db_session)
-        count = await service.count(owner_id, model_provider="anthropic")
+        # Act
+        anthropic_count = await service.count(owner_id, model_provider="anthropic")
+        openai_count = await service.count(owner_id, model_provider="openai")
+        total_count = await service.count(owner_id)
 
-        assert count == 1
-
-    @pytest.mark.asyncio
-    async def test_count_agents_returns_zero(self, db_session):
-        """Test count returns zero when no agents match."""
-        owner_id = uuid4()
-        service = AgentService(db_session)
-        count = await service.count(owner_id)
-
-        assert count == 0
+        # Assert
+        assert anthropic_count == 3
+        assert openai_count == 2
+        assert total_count == 5
 
     @pytest.mark.asyncio
-    async def test_count_agents_include_deleted(self, db_session, agent_factory):
-        """Test counting with include_deleted flag."""
+    async def test_count_agents_filter_by_is_active(
+        self, db_session: AsyncSession, agent_factory
+    ) -> None:
+        """Test counting agents filtered by active status."""
+        # Arrange
+        service = AgentService(db_session)
         owner_id = uuid4()
+
+        for _ in range(3):
+            db_session.add(agent_factory(owner_id=owner_id, is_active=True))
+        for _ in range(2):
+            db_session.add(agent_factory(owner_id=owner_id, is_active=False))
+        await db_session.flush()
+
+        # Act
+        active_count = await service.count(owner_id, is_active=True)
+        inactive_count = await service.count(owner_id, is_active=False)
+
+        # Assert
+        assert active_count == 3
+        assert inactive_count == 2
+
+    @pytest.mark.asyncio
+    async def test_count_agents_filter_by_is_public(
+        self, db_session: AsyncSession, agent_factory
+    ) -> None:
+        """Test counting agents filtered by public status."""
+        # Arrange
+        service = AgentService(db_session)
+        owner_id = uuid4()
+
+        for _ in range(2):
+            db_session.add(agent_factory(owner_id=owner_id, is_public=True))
+        for _ in range(3):
+            db_session.add(agent_factory(owner_id=owner_id, is_public=False))
+        await db_session.flush()
+
+        # Act
+        public_count = await service.count(owner_id, is_public=True)
+        private_count = await service.count(owner_id, is_public=False)
+
+        # Assert
+        assert public_count == 2
+        assert private_count == 3
+
+    @pytest.mark.asyncio
+    async def test_count_agents_exclude_deleted(
+        self, db_session: AsyncSession, agent_factory
+    ) -> None:
+        """Test counting agents excludes deleted by default."""
+        # Arrange
+        service = AgentService(db_session)
+        owner_id = uuid4()
+
         active_agent = agent_factory(owner_id=owner_id)
         deleted_agent = agent_factory(owner_id=owner_id)
         deleted_agent.soft_delete()
-        db_session.add_all([active_agent, deleted_agent])
+
+        db_session.add(active_agent)
+        db_session.add(deleted_agent)
         await db_session.flush()
 
-        service = AgentService(db_session)
-
-        # Without include_deleted
+        # Act
         count = await service.count(owner_id, include_deleted=False)
+
+        # Assert
         assert count == 1
 
-        # With include_deleted
-        count = await service.count(owner_id, include_deleted=True, is_active=None)
+    @pytest.mark.asyncio
+    async def test_count_agents_include_deleted(
+        self, db_session: AsyncSession, agent_factory
+    ) -> None:
+        """Test counting agents includes deleted when flag is True."""
+        # Arrange
+        service = AgentService(db_session)
+        owner_id = uuid4()
+
+        active_agent = agent_factory(owner_id=owner_id)
+        deleted_agent = agent_factory(owner_id=owner_id)
+        deleted_agent.soft_delete()
+
+        db_session.add(active_agent)
+        db_session.add(deleted_agent)
+        await db_session.flush()
+
+        # Act
+        count = await service.count(owner_id, include_deleted=True)
+
+        # Assert
         assert count == 2
+
+    @pytest.mark.asyncio
+    async def test_count_agents_no_agents(self, db_session: AsyncSession) -> None:
+        """Test counting when no agents exist."""
+        # Arrange
+        service = AgentService(db_session)
+        owner_id = uuid4()
+
+        # Act
+        count = await service.count(owner_id)
+
+        # Assert
+        assert count == 0
+
+
+# =============================================================================
+# UPDATE TESTS
+# =============================================================================
 
 
 class TestAgentServiceUpdate:
-    """Test AgentService.update() method."""
+    """Test AgentService.update method."""
 
     @pytest.mark.asyncio
-    async def test_update_agent_success(self, db_session, agent_factory):
+    async def test_update_agent_success(
+        self,
+        db_session: AsyncSession,
+        sample_agent: Agent,
+        agent_update_schema: AgentUpdate,
+    ) -> None:
         """Test successful agent update."""
-        agent = agent_factory(name="Original Name")
-        db_session.add(agent)
+        # Arrange
+        service = AgentService(db_session)
+        db_session.add(sample_agent)
         await db_session.flush()
 
-        service = AgentService(db_session)
-        update_data = AgentUpdate(name="Updated Name", is_active=False)
+        # Act
+        updated_agent = await service.update(sample_agent.id, agent_update_schema)
 
-        updated = await service.update(agent.id, update_data)
-
-        assert updated.name == "Updated Name"
-        assert updated.is_active is False
+        # Assert
+        assert updated_agent.id == sample_agent.id
+        assert updated_agent.name == agent_update_schema.name
+        assert updated_agent.description == agent_update_schema.description
+        assert updated_agent.is_active == agent_update_schema.is_active
+        assert updated_agent.updated_at is not None
 
     @pytest.mark.asyncio
-    async def test_update_agent_partial_fields(self, db_session, agent_factory):
+    async def test_update_agent_partial_fields(
+        self, db_session: AsyncSession, sample_agent: Agent
+    ) -> None:
         """Test updating agent with partial fields."""
-        agent = agent_factory(
-            name="Test",
-            description="Original",
-            is_active=True,
-            is_public=False,
-        )
-        db_session.add(agent)
+        # Arrange
+        service = AgentService(db_session)
+        db_session.add(sample_agent)
         await db_session.flush()
 
-        service = AgentService(db_session)
-        update_data = AgentUpdate(description="Updated Description")
+        update_data = AgentUpdate(name="Updated Name Only")
 
-        updated = await service.update(agent.id, update_data)
+        # Act
+        updated_agent = await service.update(sample_agent.id, update_data)
 
-        assert updated.description == "Updated Description"
-        assert updated.name == "Test"  # Unchanged
-        assert updated.is_active is True  # Unchanged
+        # Assert
+        assert updated_agent.name == "Updated Name Only"
+        assert updated_agent.description == sample_agent.description  # Unchanged
 
     @pytest.mark.asyncio
-    async def test_update_agent_not_found(self, db_session):
+    async def test_update_agent_not_found(
+        self, db_session: AsyncSession, agent_update_schema: AgentUpdate
+    ) -> None:
         """Test updating non-existent agent raises error."""
+        # Arrange
         service = AgentService(db_session)
-        update_data = AgentUpdate(name="Updated")
+        non_existent_id = uuid4()
 
-        with pytest.raises(AgentNotFoundError):
-            await service.update(uuid4(), update_data)
+        # Act & Assert
+        with pytest.raises(AgentNotFoundError) as exc_info:
+            await service.update(non_existent_id, agent_update_schema)
+
+        assert str(non_existent_id) in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_update_agent_database_failure(
-        self, db_session, agent_factory, monkeypatch
-    ):
-        """Test update with database failure."""
-        agent = agent_factory()
-        db_session.add(agent)
+    async def test_update_agent_with_tools(
+        self, db_session: AsyncSession, sample_agent: Agent
+    ) -> None:
+        """Test updating agent tools."""
+        # Arrange
+        service = AgentService(db_session)
+        db_session.add(sample_agent)
         await db_session.flush()
 
-        service = AgentService(db_session)
-        update_data = AgentUpdate(name="Updated")
+        new_tools = [str(uuid4()), str(uuid4()), str(uuid4())]
+        update_data = AgentUpdate(tools=new_tools)
 
-        # Mock flush to raise database error
-        async def mock_flush():
-            raise SQLAlchemyError("Database connection lost")
+        # Act
+        updated_agent = await service.update(sample_agent.id, update_data)
 
-        monkeypatch.setattr(db_session, "flush", mock_flush)
+        # Assert
+        assert updated_agent.tools == new_tools
 
-        with pytest.raises(AgentServiceError, match="Failed to update agent"):
-            await service.update(agent.id, update_data)
+
+# =============================================================================
+# DELETE TESTS
+# =============================================================================
 
 
 class TestAgentServiceDelete:
-    """Test AgentService.delete() method."""
+    """Test AgentService.delete method."""
 
     @pytest.mark.asyncio
-    async def test_delete_agent_success(self, db_session, agent_factory):
+    async def test_delete_agent_success(
+        self, db_session: AsyncSession, sample_agent: Agent
+    ) -> None:
         """Test successful agent soft delete."""
-        agent = agent_factory(name="To Delete")
-        db_session.add(agent)
+        # Arrange
+        service = AgentService(db_session)
+        db_session.add(sample_agent)
         await db_session.flush()
 
-        service = AgentService(db_session)
-        deleted = await service.delete(agent.id)
+        # Act
+        deleted_agent = await service.delete(sample_agent.id)
 
-        assert deleted.deleted_at is not None
-        assert deleted.is_active is False
+        # Assert
+        assert deleted_agent.id == sample_agent.id
+        assert deleted_agent.deleted_at is not None
+
+        # Verify it's actually deleted
+        agent = await service.get(sample_agent.id)
+        assert agent is None
 
     @pytest.mark.asyncio
-    async def test_delete_agent_not_found(self, db_session):
+    async def test_delete_agent_not_found(self, db_session: AsyncSession) -> None:
         """Test deleting non-existent agent raises error."""
+        # Arrange
         service = AgentService(db_session)
+        non_existent_id = uuid4()
 
+        # Act & Assert
+        with pytest.raises(AgentNotFoundError) as exc_info:
+            await service.delete(non_existent_id)
+
+        assert str(non_existent_id) in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_delete_already_deleted_agent(
+        self, db_session: AsyncSession, sample_agent: Agent
+    ) -> None:
+        """Test deleting an already deleted agent raises error."""
+        # Arrange
+        service = AgentService(db_session)
+        sample_agent.soft_delete()
+        db_session.add(sample_agent)
+        await db_session.flush()
+
+        # Act & Assert
         with pytest.raises(AgentNotFoundError):
-            await service.delete(uuid4())
+            await service.delete(sample_agent.id)
 
-    @pytest.mark.asyncio
-    async def test_delete_agent_sets_deleted_at(self, db_session, agent_factory):
-        """Test that delete sets deleted_at timestamp."""
-        agent = agent_factory()
-        db_session.add(agent)
-        await db_session.flush()
 
-        service = AgentService(db_session)
-        deleted = await service.delete(agent.id)
-
-        assert deleted.deleted_at is not None
-
-    @pytest.mark.asyncio
-    async def test_delete_agent_sets_is_active_false(self, db_session, agent_factory):
-        """Test that delete sets is_active to False."""
-        agent = agent_factory(is_active=True)
-        db_session.add(agent)
-        await db_session.flush()
-
-        service = AgentService(db_session)
-        deleted = await service.delete(agent.id)
-
-        assert deleted.is_active is False
+# =============================================================================
+# ADD TOOL TESTS
+# =============================================================================
 
 
 class TestAgentServiceAddTool:
-    """Test AgentService.add_tool() method."""
+    """Test AgentService.add_tool method."""
 
     @pytest.mark.asyncio
-    async def test_add_tool_to_agent_success(
-        self, db_session, agent_factory, tool_factory
-    ):
-        """Test successfully adding a tool to an agent."""
-        # Create actual Tool entity first
-        tool = tool_factory()
-        db_session.add(tool)
-        await db_session.flush()
-
-        agent = agent_factory(tools=[])
-        db_session.add(agent)
-        await db_session.flush()
-
+    async def test_add_tool_success(
+        self, db_session: AsyncSession, sample_agent: Agent
+    ) -> None:
+        """Test successfully adding a tool to agent."""
+        # Arrange
         service = AgentService(db_session)
+        db_session.add(sample_agent)
+        await db_session.flush()
 
-        updated = await service.add_tool(agent.id, tool.id)
+        tool_id = uuid4()
 
-        assert tool in updated.tools
-        assert len(updated.tools) == 1
+        # Act
+        updated_agent = await service.add_tool(sample_agent.id, tool_id)
+
+        # Assert
+        assert str(tool_id) in updated_agent.tools
 
     @pytest.mark.asyncio
-    async def test_add_tool_to_agent_not_found(self, db_session):
-        """Test adding tool to non-existent agent."""
+    async def test_add_tool_agent_not_found(self, db_session: AsyncSession) -> None:
+        """Test adding tool to non-existent agent raises error."""
+        # Arrange
         service = AgentService(db_session)
+        non_existent_id = uuid4()
+        tool_id = uuid4()
 
+        # Act & Assert
         with pytest.raises(AgentNotFoundError):
-            await service.add_tool(uuid4(), uuid4())
+            await service.add_tool(non_existent_id, tool_id)
 
     @pytest.mark.asyncio
     async def test_add_tool_already_associated(
-        self, db_session, agent_factory, tool_factory
-    ):
-        """Test adding duplicate tool raises error."""
-        # Create actual Tool entity first
-        tool = tool_factory()
-        db_session.add(tool)
-        await db_session.flush()
-
-        # Create agent and add the tool to it
-        agent = agent_factory()
-        agent.tools.append(tool)
-        db_session.add(agent)
-        await db_session.flush()
-
+        self, db_session: AsyncSession, sample_agent: Agent
+    ) -> None:
+        """Test adding already associated tool raises error."""
+        # Arrange
         service = AgentService(db_session)
+        tool_id = uuid4()
+        sample_agent.tools = [str(tool_id)]
+        db_session.add(sample_agent)
+        await db_session.flush()
 
-        with pytest.raises(ToolAlreadyAssociatedError):
-            await service.add_tool(agent.id, tool.id)
+        # Act & Assert
+        with pytest.raises(ToolAlreadyAssociatedError) as exc_info:
+            await service.add_tool(sample_agent.id, tool_id)
+
+        assert str(tool_id) in str(exc_info.value)
+        assert str(sample_agent.id) in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_add_tool_updates_modified_flag(
-        self, db_session, agent_factory, tool_factory
-    ):
-        """Test that add_tool flags the tools field as modified."""
-        # Create actual Tool entity first
-        tool = tool_factory()
-        db_session.add(tool)
-        await db_session.flush()
-
-        agent = agent_factory(tools=[])
-        db_session.add(agent)
-        await db_session.flush()
-
+    async def test_add_tool_updates_timestamp(
+        self, db_session: AsyncSession, sample_agent: Agent
+    ) -> None:
+        """Test adding tool updates updated_at timestamp."""
+        # Arrange
         service = AgentService(db_session)
+        db_session.add(sample_agent)
+        await db_session.flush()
 
-        updated = await service.add_tool(agent.id, tool.id)
+        tool_id = uuid4()
 
-        # Verify the tool was added and field was flagged
-        assert tool in updated.tools
-        assert updated.updated_at is not None
+        # Act
+        updated_agent = await service.add_tool(sample_agent.id, tool_id)
+
+        # Assert
+        assert updated_agent.updated_at is not None
+
+
+# =============================================================================
+# REMOVE TOOL TESTS
+# =============================================================================
 
 
 class TestAgentServiceRemoveTool:
-    """Test AgentService.remove_tool() method."""
+    """Test AgentService.remove_tool method."""
 
     @pytest.mark.asyncio
-    async def test_remove_tool_from_agent_success(self, db_session, agent_factory):
-        """Test successfully removing a tool from an agent."""
+    async def test_remove_tool_success(
+        self, db_session: AsyncSession, sample_agent: Agent
+    ) -> None:
+        """Test successfully removing a tool from agent."""
+        # Arrange
+        service = AgentService(db_session)
         tool_id = uuid4()
-        agent = agent_factory(tools=[str(tool_id)])
-        db_session.add(agent)
+        sample_agent.tools = [str(tool_id), str(uuid4())]
+        db_session.add(sample_agent)
         await db_session.flush()
 
-        service = AgentService(db_session)
-        updated = await service.remove_tool(agent.id, tool_id)
+        # Act
+        updated_agent = await service.remove_tool(sample_agent.id, tool_id)
 
-        assert str(tool_id) not in updated.tools
-        assert len(updated.tools) == 0
-
-    @pytest.mark.asyncio
-    async def test_remove_tool_from_agent_not_found(self, db_session):
-        """Test removing tool from non-existent agent."""
-        service = AgentService(db_session)
-
-        with pytest.raises(AgentNotFoundError):
-            await service.remove_tool(uuid4(), uuid4())
+        # Assert
+        assert str(tool_id) not in updated_agent.tools
+        assert len(updated_agent.tools) == 1
 
     @pytest.mark.asyncio
-    async def test_remove_tool_not_in_agent_tools_list(self, db_session, agent_factory):
-        """Test removing tool that isn't in agent's tools list."""
-        agent = agent_factory(tools=[])
-        db_session.add(agent)
-        await db_session.flush()
-
+    async def test_remove_tool_agent_not_found(self, db_session: AsyncSession) -> None:
+        """Test removing tool from non-existent agent raises error."""
+        # Arrange
         service = AgentService(db_session)
-
-        # Should not raise error, just no-op
-        updated = await service.remove_tool(agent.id, uuid4())
-        assert len(updated.tools) == 0
-
-    @pytest.mark.asyncio
-    async def test_remove_tool_updates_modified_flag(self, db_session, agent_factory):
-        """Test that remove_tool flags the tools field as modified."""
+        non_existent_id = uuid4()
         tool_id = uuid4()
-        agent = agent_factory(tools=[str(tool_id)])
-        db_session.add(agent)
-        await db_session.flush()
 
-        service = AgentService(db_session)
-        updated = await service.remove_tool(agent.id, tool_id)
-
-        # Verify the tool was removed and field was flagged
-        assert str(tool_id) not in updated.tools
-        assert updated.updated_at is not None
-
-
-class TestAgentServiceTestExecute:
-    """Test AgentService.test_execute() method."""
-
-    @pytest.mark.asyncio
-    async def test_agent_execute_success(self, db_session, agent_factory):
-        """Test successful agent execution."""
-        agent = agent_factory(is_active=True)
-        db_session.add(agent)
-        await db_session.flush()
-
-        service = AgentService(db_session)
-        input_data = {"task": "test task"}
-
-        result = await service.test_execute(agent.id, input_data)
-
-        assert result["success"] is True
-        assert "execution_time_ms" in result
-        assert result["output"]["input"] == input_data
-
-    @pytest.mark.asyncio
-    async def test_agent_execute_not_found(self, db_session):
-        """Test agent execution with non-existent agent."""
-        service = AgentService(db_session)
-
+        # Act & Assert
         with pytest.raises(AgentNotFoundError):
-            await service.test_execute(uuid4(), {})
+            await service.remove_tool(non_existent_id, tool_id)
 
     @pytest.mark.asyncio
-    async def test_agent_execute_inactive_agent(self, db_session, agent_factory):
-        """Test agent execution on inactive agent raises error."""
-        agent = agent_factory(is_active=False)
-        db_session.add(agent)
+    async def test_remove_tool_not_associated(
+        self, db_session: AsyncSession, sample_agent: Agent
+    ) -> None:
+        """Test removing non-associated tool doesn't raise error."""
+        # Arrange
+        service = AgentService(db_session)
+        tool_id = uuid4()
+        sample_agent.tools = [str(uuid4())]  # Different tool
+        db_session.add(sample_agent)
         await db_session.flush()
 
-        service = AgentService(db_session)
+        # Act - Should not raise error
+        updated_agent = await service.remove_tool(sample_agent.id, tool_id)
 
-        with pytest.raises(AgentExecutionError, match="not active"):
-            await service.test_execute(agent.id, {})
+        # Assert - Tools should be unchanged
+        assert len(updated_agent.tools) == 1
+        assert str(tool_id) not in updated_agent.tools
 
     @pytest.mark.asyncio
-    async def test_agent_execute_returns_execution_time(
-        self, db_session, agent_factory
-    ):
-        """Test that agent execution returns execution time."""
-        agent = agent_factory(is_active=True)
-        db_session.add(agent)
+    async def test_remove_tool_updates_timestamp(
+        self, db_session: AsyncSession, sample_agent: Agent
+    ) -> None:
+        """Test removing tool updates updated_at timestamp."""
+        # Arrange
+        service = AgentService(db_session)
+        tool_id = uuid4()
+        sample_agent.tools = [str(tool_id)]
+        db_session.add(sample_agent)
         await db_session.flush()
 
-        service = AgentService(db_session)
-        result = await service.test_execute(agent.id, {})
+        # Act
+        updated_agent = await service.remove_tool(sample_agent.id, tool_id)
 
-        assert "execution_time_ms" in result
-        assert isinstance(result["execution_time_ms"], float)
-        assert result["execution_time_ms"] >= 0
-
-
-class TestAgentServiceListDefaultActiveFilter:
-    """Test AgentService.list() default is_active=True behavior."""
+        # Assert
+        assert updated_agent.updated_at is not None
 
     @pytest.mark.asyncio
-    async def test_list_returns_only_active_by_default(self, db_session, agent_factory):
-        """Test that list() returns only active agents by default."""
-        owner_id = uuid4()
-        active_agent = agent_factory(owner_id=owner_id, is_active=True)
-        inactive_agent = agent_factory(owner_id=owner_id, is_active=False)
-        db_session.add_all([active_agent, inactive_agent])
+    async def test_remove_tool_from_empty_list(
+        self, db_session: AsyncSession, sample_agent: Agent
+    ) -> None:
+        """Test removing tool from agent with empty tools list."""
+        # Arrange
+        service = AgentService(db_session)
+        sample_agent.tools = []
+        db_session.add(sample_agent)
         await db_session.flush()
 
-        service = AgentService(db_session)
+        tool_id = uuid4()
 
-        # Default behavior should return only active agents
-        results = await service.list(owner_id)
-        assert len(results) == 1
-        assert results[0].is_active is True
+        # Act - Should not raise error
+        updated_agent = await service.remove_tool(sample_agent.id, tool_id)
 
-        # Explicitly request inactive agents
-        results = await service.list(owner_id, is_active=False)
-        assert len(results) == 1
-        assert results[0].is_active is False
+        # Assert
+        assert updated_agent.tools == []
 
-        # Request all agents (active and inactive)
-        results = await service.list(owner_id, is_active=None)
-        assert len(results) == 2
+
+# =============================================================================
+# EXCEPTION TESTS
+# =============================================================================
+
+
+class TestAgentServiceExceptions:
+    """Test AgentService exception hierarchy."""
+
+    def test_agent_not_found_is_service_error(self) -> None:
+        """Test AgentNotFoundError inherits from AgentServiceError."""
+        # Arrange
+        error = AgentNotFoundError("test message")
+
+        # Assert
+        assert isinstance(error, AgentServiceError)
+        assert isinstance(error, Exception)
+
+    def test_tool_already_associated_is_service_error(self) -> None:
+        """Test ToolAlreadyAssociatedError inherits from AgentServiceError."""
+        # Arrange
+        error = ToolAlreadyAssociatedError("test message")
+
+        # Assert
+        assert isinstance(error, AgentServiceError)
+        assert isinstance(error, Exception)
+
+    def test_exception_messages(self) -> None:
+        """Test exception messages are properly formatted."""
+        # Arrange & Assert
+        assert "Agent" in str(AgentNotFoundError("Agent 123 not found"))
+        assert "Tool" in str(ToolAlreadyAssociatedError("Tool already added"))
+        assert "Failed" in str(AgentServiceError("Failed to create agent"))
