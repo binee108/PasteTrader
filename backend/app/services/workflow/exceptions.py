@@ -1,14 +1,20 @@
-"""DAG Validation Service custom exceptions.
+"""DAG Validation and Execution custom exceptions.
 
 TAG: [SPEC-010] [DAG] [EXCEPTIONS]
+TAG: [SPEC-011] [EXECUTION] [EXCEPTIONS]
 
-This module defines custom exceptions for DAG validation operations.
-All exceptions inherit from DAGValidationError for consistent error handling.
+This module defines custom exceptions for DAG validation operations
+and workflow execution operations. All exceptions inherit from their
+respective base exceptions for consistent error handling.
 """
 
 from typing import Any
 from uuid import UUID
 
+
+# ============================================================================
+# DAG Validation Exceptions (SPEC-010)
+# ============================================================================
 
 class DAGValidationError(Exception):
     """Base exception for DAG validation errors.
@@ -108,3 +114,89 @@ class ValidationTimeoutError(DAGValidationError):
             details={"timeout_seconds": timeout_seconds},
         )
         self.timeout_seconds = timeout_seconds
+
+
+# ============================================================================
+# Workflow Execution Exceptions (SPEC-011)
+# ============================================================================
+
+class ExecutionError(Exception):
+    """Base exception for workflow execution errors.
+
+    TAG: [SPEC-011] [EXECUTION] [EXCEPTIONS]
+
+    Attributes:
+        message: Human-readable error message.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
+class NodeTimeoutError(ExecutionError):
+    """Raised when node execution exceeds timeout.
+
+    TAG: [SPEC-011] [EXECUTION] [EXCEPTIONS]
+
+    Attributes:
+        node_id: ID of the node that timed out.
+        timeout_seconds: Timeout duration in seconds.
+    """
+
+    def __init__(self, node_id: UUID, timeout_seconds: float) -> None:
+        message = f"Node {str(node_id)[:8]} execution timed out after {timeout_seconds}s"
+        super().__init__(message)
+        self.node_id = node_id
+        self.timeout_seconds = timeout_seconds
+
+
+class NodeExecutionError(ExecutionError):
+    """Raised when node execution fails.
+
+    TAG: [SPEC-011] [EXECUTION] [EXCEPTIONS]
+
+    Attributes:
+        node_id: ID of the node that failed.
+        message: Error message.
+        original_error: The original exception that caused the failure.
+    """
+
+    def __init__(self, node_id: UUID, message: str, original_error: Exception | None = None) -> None:
+        error_message = f"Node {str(node_id)[:8]} execution failed: {message}"
+        super().__init__(error_message)
+        self.node_id = node_id
+        self.message = message
+        self.original_error = original_error
+
+
+class ExecutionCancelledError(ExecutionError):
+    """Raised when workflow execution is cancelled.
+
+    TAG: [SPEC-011] [EXECUTION] [EXCEPTIONS]
+
+    Attributes:
+        execution_id: ID of the cancelled execution.
+    """
+
+    def __init__(self, execution_id: UUID) -> None:
+        message = f"Execution {str(execution_id)[:8]} was cancelled"
+        super().__init__(message)
+        self.execution_id = execution_id
+
+
+class ConditionEvaluationError(ExecutionError):
+    """Raised when condition evaluation fails.
+
+    TAG: [SPEC-011] [EXECUTION] [EXCEPTIONS]
+
+    Attributes:
+        node_id: ID of the condition node that failed.
+        reason: Reason for the evaluation failure.
+    """
+
+    def __init__(self, node_id: UUID, reason: str) -> None:
+        message = f"Condition node {str(node_id)[:8]} evaluation failed: {reason}"
+        super().__init__(message)
+        self.node_id = node_id
+        self.reason = reason
