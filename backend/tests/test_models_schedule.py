@@ -50,9 +50,9 @@ class TestScheduleModel:
         }
 
         for field_name, _expected_type in schedule_fields.items():
-            assert hasattr(
-                Schedule, field_name
-            ), f"Schedule should have {field_name} field"
+            assert hasattr(Schedule, field_name), (
+                f"Schedule should have {field_name} field"
+            )
 
     def test_schedule_inherits_from_mixins(self) -> None:
         """Schedule should inherit from UUIDMixin, TimestampMixin, and SoftDeleteMixin."""
@@ -67,9 +67,9 @@ class TestScheduleModel:
         """Schedule should have a relationship to Workflow."""
         from app.models.schedule import Schedule
 
-        assert hasattr(
-            Schedule, "workflow"
-        ), "Schedule should have workflow relationship"
+        assert hasattr(Schedule, "workflow"), (
+            "Schedule should have workflow relationship"
+        )
 
     def test_schedule_has_user_relationship(self) -> None:
         """Schedule should have a relationship to User."""
@@ -327,3 +327,96 @@ class TestScheduleProperties:
 
         assert schedule.run_count == initial_count + 1
         assert schedule.run_count == 6
+
+
+class TestSchedulePropertiesEdgeCases:
+    """Test edge cases for Schedule property methods."""
+
+    def test_is_expired_with_invalid_end_date_format(self) -> None:
+        """is_expired should handle invalid end_date format gracefully."""
+        from app.models.schedule import Schedule
+
+        schedule = Schedule(
+            workflow_id=uuid.uuid4(),
+            user_id=uuid.uuid4(),
+            name="Invalid End Date",
+            schedule_type=ScheduleType.CRON,
+            schedule_config={
+                "cron_expression": "0 9 * * *",
+                "end_date": "invalid-date-format",  # Invalid format
+            },
+        )
+
+        # Should return False (not expired) for invalid date format
+        assert schedule.is_expired is False
+
+    def test_is_expired_with_malformed_end_date(self) -> None:
+        """is_expired should handle malformed end_date values."""
+        from app.models.schedule import Schedule
+
+        schedule = Schedule(
+            workflow_id=uuid.uuid4(),
+            user_id=uuid.uuid4(),
+            name="Malformed End Date",
+            schedule_type=ScheduleType.CRON,
+            schedule_config={
+                "cron_expression": "0 9 * * *",
+                "end_date": None,  # None value
+            },
+        )
+
+        assert schedule.is_expired is False
+
+    def test_is_expired_date_schedule_without_run_date(self) -> None:
+        """is_expired for DATE schedule without run_date should return False."""
+        from app.models.schedule import Schedule
+
+        schedule = Schedule(
+            workflow_id=uuid.uuid4(),
+            user_id=uuid.uuid4(),
+            name="Date Schedule No Run Date",
+            schedule_type=ScheduleType.DATE,
+            schedule_config={},  # No run_date
+        )
+
+        # Should not be expired if there's no run_date
+        assert schedule.is_expired is False
+
+    def test_is_expired_date_schedule_with_future_run_date(self) -> None:
+        """is_expired for DATE schedule with future run_date should return False."""
+        from app.models.schedule import Schedule
+
+        future_date = datetime(2030, 1, 1, 12, 0, 0, tzinfo=UTC)
+
+        schedule = Schedule(
+            workflow_id=uuid.uuid4(),
+            user_id=uuid.uuid4(),
+            name="Future Date Schedule",
+            schedule_type=ScheduleType.DATE,
+            schedule_config={"run_date": "2030-01-01T12:00:00Z"},
+            last_run_at=None,  # Haven't run yet
+        )
+
+        assert schedule.is_expired is False
+
+    def test_schedule_repr_includes_all_fields(self) -> None:
+        """__repr__ should include all key fields."""
+        from app.models.schedule import Schedule
+
+        schedule = Schedule(
+            id=uuid.uuid4(),
+            workflow_id=uuid.uuid4(),
+            user_id=uuid.uuid4(),
+            name="Test Schedule",
+            schedule_type=ScheduleType.CRON,
+            schedule_config={"cron_expression": "0 9 * * *"},
+        )
+
+        repr_str = repr(schedule)
+        assert "Schedule" in repr_str
+        assert str(schedule.id) in repr_str
+        assert "Test Schedule" in repr_str
+        assert "cron" in repr_str
+
+
+# =============================================================================
