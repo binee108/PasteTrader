@@ -23,18 +23,13 @@ from app.api.deps import (  # noqa: TC001 - Needed at runtime for FastAPI DI
 from app.schemas.base import PaginatedResponse
 from app.schemas.tool import (
     ToolCreate,
-    ToolListResponse,
+    ToolResponse,
     ToolResponse,
     ToolTestRequest,
     ToolTestResponse,
     ToolUpdate,
 )
-from app.services.tool_service import (
-    ToolExecutionError,
-    ToolNotFoundError,
-    ToolService,
-    ToolServiceError,
-)
+from app.services.tool_service import ToolService
 
 router = APIRouter()
 
@@ -49,7 +44,7 @@ TEMP_OWNER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 @router.get(
     "/",
-    response_model=PaginatedResponse[ToolListResponse],
+    response_model=PaginatedResponse[ToolResponse],
     summary="List tools",
     description="Retrieve a paginated list of tools with optional filtering.",
 )
@@ -68,7 +63,7 @@ async def list_tools(
         bool | None,
         Query(description="Filter by public status"),
     ] = None,
-) -> PaginatedResponse[ToolListResponse]:
+) -> PaginatedResponse[ToolResponse]:
     """List tools with pagination and optional filtering.
 
     Args:
@@ -100,7 +95,7 @@ async def list_tools(
 
         # Convert models to response schemas
         tool_responses = [
-            ToolListResponse(
+            ToolResponse(
                 id=tool.id,
                 name=tool.name,
                 tool_type=tool.tool_type,

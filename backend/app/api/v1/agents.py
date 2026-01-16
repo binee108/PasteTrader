@@ -22,21 +22,12 @@ from app.api.deps import (  # noqa: TC001 - Needed at runtime for FastAPI DI
 )
 from app.schemas.agent import (
     AgentCreate,
-    AgentListResponse,
     AgentResponse,
-    AgentTestRequest,
-    AgentTestResponse,
-    AgentToolAdd,
+    AgentToolsUpdate,
     AgentUpdate,
 )
 from app.schemas.base import PaginatedResponse
-from app.services.agent_service import (
-    AgentExecutionError,
-    AgentNotFoundError,
-    AgentService,
-    AgentServiceError,
-    ToolAlreadyAssociatedError,
-)
+from app.services.agent_service import AgentService
 
 router = APIRouter()
 
@@ -51,7 +42,7 @@ TEMP_OWNER_ID = UUID("00000000-0000-0000-0000-000000000001")
 
 @router.get(
     "/",
-    response_model=PaginatedResponse[AgentListResponse],
+    response_model=PaginatedResponse[AgentResponse],
     summary="List agents",
     description="Retrieve a paginated list of agents with optional filtering.",
 )
@@ -70,7 +61,7 @@ async def list_agents(
         bool | None,
         Query(description="Filter by public status"),
     ] = None,
-) -> PaginatedResponse[AgentListResponse]:
+) -> PaginatedResponse[AgentResponse]:
     """List agents with pagination and optional filtering.
 
     Args:
@@ -102,11 +93,11 @@ async def list_agents(
 
         # Convert models to response schemas
         agent_responses = [
-            AgentListResponse(
+            AgentResponse(
                 id=agent.id,
                 name=agent.name,
-                model_provider=agent.model_provider or "unknown",
-                model_name=agent.model_name or "unknown",
+                model_provider=agent.model_provider,
+                model_name=agent.model_name,
                 is_active=agent.is_active,
                 is_public=agent.is_public,
                 created_at=agent.created_at.isoformat(),
@@ -365,52 +356,6 @@ async def remove_tool_from_agent(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to remove tool from agent: {e!s}",
-        ) from e
-
-
-@router.post(
-    "/{agent_id}/test",
-    response_model=AgentTestResponse,
-    summary="Test agent execution",
-    description="Test execute an agent with sample input data.",
-)
-async def test_agent(
-    db: DBSession,
-    agent_id: UUID,
-    test_request: AgentTestRequest,
-) -> AgentTestResponse:
-    """Test execute an agent.
-
-    Args:
-        db: Database session.
-        agent_id: UUID of the agent.
-        test_request: Test input data.
-
-    Returns:
-        Agent test execution results.
-
-    Raises:
-        HTTPException: 404 if agent not found.
-        HTTPException: 400 if execution fails.
-    """
-    try:
-        agent_service = AgentService(db)
-        result = await agent_service.test_execute(agent_id, test_request.input_data)
-        return AgentTestResponse(**result)
-    except AgentNotFoundError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        ) from e
-    except AgentExecutionError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        ) from e
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to test agent: {e!s}",
         ) from e
 
 

@@ -31,7 +31,6 @@ from app.schemas.validation import (
 )
 from app.services.workflow.algorithms import GraphAlgorithms
 from app.services.workflow.cache import (
-    _deserialize_validation_result,
     get_validation_cache,
 )
 from app.services.workflow.exceptions import (
@@ -130,7 +129,7 @@ class DAGValidator:
                 )
 
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Return timeout error instead of raising
             timeout_result = ValidationResult(
                 is_valid=False,

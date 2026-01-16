@@ -6,12 +6,12 @@ REQ: REQ-002 - Tool Test Execution Tests
 REQ: REQ-003 - Tool Filtering Tests
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from fastapi import status
 from httpx import AsyncClient
-from unittest.mock import MagicMock, AsyncMock, patch
 
 # =============================================================================
 # Tool Endpoint Tests
@@ -213,21 +213,15 @@ class TestToolEndpoints:
     @pytest.mark.asyncio
     async def test_list_tools_with_pagination(self, async_client: AsyncClient):
         """Test tool listing with pagination."""
-        # Create multiple tools with valid config
+        # Create multiple tools
         for i in range(5):
             await async_client.post(
                 "/api/v1/tools/",
                 json={
                     "name": f"Tool {i}",
                     "tool_type": "http",
-                    "config": {
-                        "url": f"https://api.example.com/endpoint{i}",
-                        "method": "POST",
-                    },
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {"query": {"type": "string"}},
-                    },
+                    "config": {},
+                    "input_schema": {},
                 },
             )
 
@@ -342,14 +336,8 @@ class TestToolAPIExceptionHandling:
             tool_data = {
                 "name": "Test Tool",
                 "tool_type": "http",
-                "config": {
-                    "url": "https://api.example.com/endpoint",
-                    "method": "POST",
-                },
-                "input_schema": {
-                    "type": "object",
-                    "properties": {"query": {"type": "string"}},
-                },
+                "config": {},
+                "input_schema": {},
             }
             response = await async_client.post("/api/v1/tools/", json=tool_data)
 

@@ -3,14 +3,11 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import httpx
 
 from app.services.executors.base import ToolExecutionResult, ToolExecutor
-
-if TYPE_CHECKING:
-    from app.models.tool import Tool
 
 
 class HttpToolExecutor(ToolExecutor):
@@ -286,16 +283,15 @@ class HttpToolExecutor(ToolExecutor):
 
             return json_content
 
-        else:
-            # Text response
-            text_content: str = response.text
+        # Text response
+        text_content: str = response.text
 
-            if len(text_content) > max_size:
-                return text_content[:max_size] + f"\n... [truncated at {max_size} bytes]"
+        if len(text_content) > max_size:
+            return text_content[:max_size] + f"\n... [truncated at {max_size} bytes]"
 
-            return text_content
+        return text_content
 
-    async def __aenter__(self) -> "HttpToolExecutor":
+    async def __aenter__(self) -> HttpToolExecutor:
         """Async context manager entry."""
         return self
 

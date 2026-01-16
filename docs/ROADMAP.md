@@ -23,7 +23,7 @@ PasteTrader는 AI 기반 트레이딩 워크플로우 자동화 플랫폼입니�
 | 1 | Workflow Core Models | M-L | Week 1 | ✅ Implemented |
 | 2 | Execution Models | M | Week 2 | ✅ Implemented |
 | 3 | API Layer | M-L | Week 2 | ✅ Implemented |
-| 4 | Workflow Engine | XL | Week 3-4 | 🔲 Pending |
+| 4 | Workflow Engine | XL | Week 3-4 | 🚧 In Progress |
 | 5 | LLM Integration | L | Week 5 | 🔲 Pending |
 | 6 | Content Parsing | M | Week 8 | 🔲 Pending |
 | 7 | Frontend UI | XL | Week 6-7 | 🔲 Pending |
@@ -220,7 +220,7 @@ Agent API (7 endpoints):
 
 ---
 
-### Phase 4: Workflow Engine ⭐ Critical Path
+### Phase 4: Workflow Engine ⭐ Critical Path 🚧 In Progress (2026-01-14)
 
 **Objective**: DAG 기반 워크플로우 실행 엔진 구현
 
@@ -255,6 +255,9 @@ class NodeProcessor(ABC):
 - [ ] Async parallel execution
 - [ ] Error handling & retry logic
 - [ ] Execution context management
+
+**Current Status**:
+- SPEC-010: DAG Validation Service - In Progress (TDD implementation started)
 
 ---
 
@@ -451,7 +454,7 @@ Phase 2 ────────────────┘      Phase 7 <──
 | SPEC-007 | 3 | Workflow API Endpoints | P0 | ✅ Complete (89.41% coverage) |
 | SPEC-008 | 3/8 | Execution API Endpoints & APScheduler Integration | P0 | 🚧 Partial (API done, Scheduler pending) |
 | SPEC-009 | 3 | Tool/Agent API Endpoints | P1 | ✅ |
-| SPEC-010 | 4 | DAG Validation Service | P0 | 🔲 |
+| SPEC-010 | 4 | DAG Validation Service | P0 | 🚧 In Progress |
 | SPEC-011 | 4 | Workflow Execution Engine | P0 | 🔲 |
 | SPEC-012 | 4 | Node Processor Framework | P0 | 🔲 |
 | SPEC-013 | 5 | LLM Provider Abstraction | P0 | 🔲 |

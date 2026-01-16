@@ -1,120 +1,167 @@
 """ExecutionContext for workflow execution.
 
-TAG: [SPEC-012] [WORKFLOW] [CONTEXT]
+TAG: [SPEC-011] [EXECUTION] [CONTEXT]
+REQ: REQ-011-003 - ExecutionContext for node data passing
 
-This module provides the execution context for processors.
-Will be fully integrated with SPEC-011 when available.
+This module provides ExecutionContext class for managing data flow
+between workflow nodes during execution.
 """
 
-from typing import Any
-from uuid import UUID
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from app.models.workflow import Edge, Node
 
 
 class ExecutionContext:
-    """Execution context for workflow processors.
+    """Thread-safe context for passing data between nodes.
 
-    TAG: [SPEC-012] [CONTEXT]
+    TAG: [SPEC-011] [EXECUTION] [CONTEXT]
+    REQ: REQ-011-003
 
-    Provides access to execution variables and node outputs.
-    This is a simplified stub that will be enhanced by SPEC-011.
+    Manages workflow variables, node outputs, and error recording
+    during workflow execution. Uses asyncio.Lock for thread safety.
+
+    Attributes:
+        workflow_execution_id: UUID of the workflow execution.
+        _variables: Workflow variables dictionary.
+        _node_outputs: Dictionary mapping node IDs to their output data.
+        _errors: List of error dictionaries.
+        _lock: Async lock for thread-safe operations.
+
     """
 
-    def __init__(
-        self,
-        execution_id: UUID,
-        variables: dict[str, Any] | None = None,
-        node_outputs: dict[str, dict[str, Any]] | None = None,
-    ):
-        """Initialize execution context.
+    def __init__(self, workflow_execution_id: UUID, input_data: dict[str, Any]) -> None:
+        """Initialize the execution context.
 
         Args:
-            execution_id: Unique identifier for this execution
-            variables: Runtime variables available during execution
-            node_outputs: Outputs from previously executed nodes
+            workflow_execution_id: UUID of the workflow execution.
+            input_data: Initial input data for the workflow.
+
         """
-        self.execution_id = execution_id
-        self.variables = variables or {}
-        self.node_outputs = node_outputs or {}
+        from asyncio import Lock
 
-    def get_variable(self, path: str, default: Any = None) -> Any:
-        """Get variable from execution context.
+        self.workflow_execution_id = workflow_execution_id
+        self._variables: dict[str, Any] = dict(input_data)
+        self._node_outputs: dict[UUID, dict[str, Any]] = {}
+        self._errors: list[dict[str, Any]] = []
+        self._lock = Lock()
 
-        TAG: [SPEC-012] [CONTEXT] [GET_VARIABLE]
+    async def get_input(self, node: Node, incoming_edges: list[Edge]) -> dict[str, Any]:  # noqa: ARG002
+        """Get input data for a node from predecessor outputs.
+
+        TAG: [SPEC-011] [EXECUTION] [CONTEXT]
+        REQ: REQ-011-003
+
+        Merges outputs from all predecessor nodes into a single input dict.
+        If multiple predecessors produce the same key, the last one wins.
 
         Args:
-            path: Variable path (e.g., "user.id" or "api_key")
-            default: Default value if variable not found
+            node: The target node to get input for.
+            incoming_edges: List of edges coming into this node.
 
         Returns:
-            Variable value or default
+            Merged input data dictionary from all predecessor outputs.
+
         """
-        # Simple dot-notation access
-        keys = path.split(".")
-        value = self.variables
+        input_data: dict[str, Any] = {}
 
-        for key in keys:
-            if isinstance(value, dict) and key in value:
-                value = value[key]
-            else:
-                return default
+        async with self._lock:
+            for edge in incoming_edges:
+                predecessor_output = self._node_outputs.get(edge.source_node_id, {})
+                input_data.update(predecessor_output)
 
-        return value
+        return input_data
 
-    def get_node_output(self, node_id: str, key: str | None = None) -> Any:
-        """Get output from a previously executed node.
+    async def set_output(self, node_id: UUID, data: dict[str, Any]) -> None:
+        """Store output data from a node.
 
-        TAG: [SPEC-012] [CONTEXT] [GET_NODE_OUTPUT]
+        TAG: [SPEC-011] [EXECUTION] [CONTEXT]
+        REQ: REQ-011-003
 
         Args:
-            node_id: ID of the node to get output from
-            key: Optional key within the node output
+            node_id: UUID of the node that produced the output.
+            data: Output data dictionary to store.
+
+        """
+        async with self._lock:
+            self._node_outputs[node_id] = data
+
+    async def get_variable(self, name: str) -> Any:
+        """Get a workflow variable.
+
+        TAG: [SPEC-011] [EXECUTION] [CONTEXT]
+        REQ: REQ-011-003
+
+        Args:
+            name: Name of the variable to retrieve.
 
         Returns:
-            Node output value or entire output dict if key is None
+            Variable value, or None if not found.
 
-        Raises:
-            KeyError: If node_id not found in context
         """
-        if node_id not in self.node_outputs:
-            raise KeyError(f"Node {node_id} not found in execution context")
+        async with self._lock:
+            return self._variables.get(name)
 
-        output = self.node_outputs[node_id]
+    async def set_variable(self, name: str, value: Any) -> None:
+        """Set a workflow variable.
 
-        if key is not None:
-            if isinstance(output, dict) and key in output:
-                return output[key]
-            raise KeyError(f"Key {key} not found in node {node_id} output")
-
-        return output
-
-    def set_variable(self, path: str, value: Any) -> None:
-        """Set variable in execution context.
-
-        TAG: [SPEC-012] [CONTEXT] [SET_VARIABLE]
+        TAG: [SPEC-011] [EXECUTION] [CONTEXT]
+        REQ: REQ-011-003
 
         Args:
-            path: Variable path (e.g., "user.id")
-            value: Value to set
+            name: Name of the variable to set.
+            value: Value to set.
+
         """
-        keys = path.split(".")
-        current = self.variables
+        async with self._lock:
+            self._variables[name] = value
 
-        # Navigate to the parent dict
-        for key in keys[:-1]:
-            if key not in current:
-                current[key] = {}
-            current = current[key]
+    async def add_error(
+        self, node_id: UUID, error_type: str, message: str,
+    ) -> None:
+        """Record an execution error.
 
-        # Set the value
-        current[keys[-1]] = value
-
-    def set_node_output(self, node_id: str, outputs: dict[str, Any]) -> None:
-        """Store node output in execution context.
-
-        TAG: [SPEC-012] [CONTEXT] [SET_NODE_OUTPUT]
+        TAG: [SPEC-011] [EXECUTION] [CONTEXT]
+        REQ: REQ-011-003
 
         Args:
-            node_id: ID of the node
-            outputs: Output data from the node
+            node_id: UUID of the node where the error occurred.
+            error_type: Type/class name of the error.
+            message: Error message.
+
         """
-        self.node_outputs[node_id] = outputs
+        async with self._lock:
+            self._errors.append(
+                {"node_id": str(node_id), "error_type": error_type, "message": message},
+            )
+
+    def has_errors(self) -> bool:
+        """Check if any errors occurred.
+
+        TAG: [SPEC-011] [EXECUTION] [CONTEXT]
+        REQ: REQ-011-003
+
+        Returns:
+            True if errors have been recorded, False otherwise.
+
+        """
+        # Synchronous method - lock not needed for simple len check
+        return len(self._errors) > 0
+
+    async def get_all_outputs(self) -> dict[UUID, dict[str, Any]]:
+        """Get all node outputs.
+
+        TAG: [SPEC-011] [EXECUTION] [CONTEXT]
+        REQ: REQ-011-003
+
+        Returns:
+            Dictionary mapping node IDs to their output data.
+
+        """
+        async with self._lock:
+            return dict(self._node_outputs)

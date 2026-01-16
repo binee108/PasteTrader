@@ -166,11 +166,11 @@ __all__ = [
     "AgentCreate",
     "AgentListResponse",
     "AgentResponse",
+    "AgentTestRequest",
+    "AgentTestResponse",
     "AgentToolAdd",
     "AgentToolsUpdate",
     "AgentUpdate",
-    "AgentTestRequest",
-    "AgentTestResponse",
 ]
 
 

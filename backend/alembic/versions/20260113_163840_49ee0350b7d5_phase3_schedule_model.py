@@ -10,17 +10,18 @@ REQ: REQ-002 - ScheduleType Enum Definition
 REQ: REQ-004 - Workflow-Schedule Relationship
 REQ: REQ-005 - User-Schedule Relationship
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
+
 # revision identifiers, used by Alembic.
 revision: str = "49ee0350b7d5"
-down_revision: Union[str, None] = "002_phase2_execution_models"
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = "002_phase2_execution_models"
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
