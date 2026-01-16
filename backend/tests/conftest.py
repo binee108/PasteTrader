@@ -31,21 +31,44 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import Session
 
+# Import app (required for async_client fixture)
 from app.main import app
-from app.models import Base
-from app.models.agent import Agent
-from app.models.enums import (
-    ExecutionStatus,
-    LogLevel,
-    ModelProvider,
-    NodeType,
-    ToolType,
-    TriggerType,
-)
-from app.models.execution import ExecutionLog, NodeExecution, WorkflowExecution
-from app.models.tool import Tool
-from app.models.tool_spec009 import Spec009Base
-from app.models.workflow import Edge, Node, Workflow
+
+try:
+    from app.models import Base
+    from app.models.agent import Agent
+    from app.models.enums import (
+        ExecutionStatus,
+        LogLevel,
+        ModelProvider,
+        NodeType,
+        ToolType,
+        TriggerType,
+    )
+    from app.models.execution import ExecutionLog, NodeExecution, WorkflowExecution
+    from app.models.schedule import Schedule
+    from app.models.tool import Tool
+    from app.models.tool_spec009 import Spec009Base
+    from app.models.user import User
+    from app.models.workflow import Edge, Node, Workflow
+except ImportError:
+    Base = None
+    Agent = None
+    ExecutionStatus = None
+    LogLevel = None
+    ModelProvider = None
+    NodeType = None
+    ToolType = None
+    TriggerType = None
+    ExecutionLog = None
+    NodeExecution = None
+    WorkflowExecution = None
+    Schedule = None
+    Tool = None
+    Spec009Base = None
+    Edge = None
+    Node = None
+    Workflow = None
 
 # =============================================================================
 # PYTEST CONFIGURATION
@@ -1074,3 +1097,242 @@ def sample_execution_data() -> dict:
         "context": {"variables": {}, "secrets": {}, "environment": {}},
         "metadata_": {"triggered_by": "test", "priority": 0, "tags": []},
     }
+
+
+# =============================================================================
+# SCHEDULE FIXTURES
+# =============================================================================
+
+
+@pytest.fixture
+def sample_schedule(sample_user_id: str, sample_workflow: Workflow):
+    """Create a sample Schedule instance for testing.
+
+    Args:
+        sample_user_id: User ID to use as schedule owner.
+        sample_workflow: The workflow this schedule belongs to.
+
+    Returns:
+        Schedule: Sample schedule instance (not persisted).
+
+    Example:
+        def test_schedule_properties(sample_schedule):
+            assert sample_schedule.name == "Test Schedule"
+            assert sample_schedule.schedule_type == ScheduleType.CRON
+    """
+    from app.models.enums import ScheduleType
+
+    now = datetime.now(UTC)
+    return Schedule(
+        id=uuid4(),
+        workflow_id=sample_workflow.id,
+        user_id=UUID(sample_user_id),
+        name="Test Schedule",
+        description="A test schedule for integration testing",
+        schedule_type=ScheduleType.CRON,
+        schedule_config={"cron_expression": "0 9 * * 1-5"},
+        timezone="UTC",
+        is_active=True,
+        job_id="test-job-id",
+        next_run_at=datetime(2026, 1, 17, 9, 0, tzinfo=UTC),
+        last_run_at=None,
+        run_count=0,
+        metadata_={},
+        created_at=now,
+        updated_at=now,
+    )
+
+
+@pytest.fixture
+def schedule_factory(sample_user_id: str):
+    """Factory for creating test Schedule objects.
+
+    Args:
+        sample_user_id: Default user ID for schedule owner.
+
+    Returns:
+        Callable: Factory function that creates Schedule instances.
+
+    Example:
+        def test_schedule_creation(schedule_factory):
+            schedule = schedule_factory(name="Custom Schedule")
+            assert schedule.name == "Custom Schedule"
+    """
+    from app.models.enums import ScheduleType
+
+    def _create(**kwargs):
+        workflow_id = kwargs.pop("workflow_id", uuid4())
+        defaults = {
+            "id": uuid4(),
+            "workflow_id": workflow_id,
+            "user_id": UUID(sample_user_id),
+            "name": "Factory Schedule",
+            "description": None,
+            "schedule_type": ScheduleType.CRON,
+            "schedule_config": {"cron_expression": "0 9 * * *"},
+            "timezone": "UTC",
+            "is_active": True,
+            "job_id": None,
+            "next_run_at": None,
+            "last_run_at": None,
+            "run_count": 0,
+            "metadata_": {},
+        }
+        defaults.update(kwargs)
+        return Schedule(**defaults)
+
+    return _create
+
+
+@pytest.fixture
+def schedule_model(sample_schedule: Schedule):
+    """Alias for sample_schedule for backward compatibility.
+
+    Args:
+        sample_schedule: A sample schedule instance.
+
+    Returns:
+        Schedule: Sample schedule instance.
+    """
+    return sample_schedule
+
+
+@pytest.fixture
+def schedule_service():
+    """Create a ScheduleService instance for testing.
+
+    Returns:
+        ScheduleService: Service instance with mock scheduler.
+
+    Example:
+        def test_schedule_creation(schedule_service):
+            result = await schedule_service.create_schedule(
+                db_session, schedule_data, user_id
+            )
+            assert result.name == "Test Schedule"
+    """
+    from unittest.mock import MagicMock
+    from app.services.schedule.service import ScheduleService
+
+    # Create mock scheduler to avoid apscheduler dependency
+    mock_scheduler = MagicMock()
+    mock_scheduler.add_schedule_job = MagicMock()
+    mock_scheduler.remove_job = MagicMock()
+    mock_scheduler.pause_job = MagicMock()
+    mock_scheduler.resume_job = MagicMock()
+    mock_scheduler.get_job = MagicMock()
+
+    return ScheduleService(scheduler=mock_scheduler)
+
+
+@pytest.fixture
+def workflow_service():
+    """Create a WorkflowService instance for testing.
+
+    Returns:
+        WorkflowService: Service instance for workflow operations.
+
+    Example:
+        def test_workflow_operations(workflow_service):
+            result = await workflow_service.create_workflow(
+                db_session, workflow_data, user_id
+            )
+    """
+    from app.services.workflow_service import WorkflowService
+
+    return WorkflowService()
+
+
+@pytest.fixture
+def execution_service():
+    """Create an ExecutionService instance for testing.
+
+    Returns:
+        ExecutionService: Service instance for execution operations.
+
+    Example:
+        def test_execution_workflow(execution_service):
+            result = await execution_service.execute_workflow(
+                db_session, workflow_id, execution_data
+            )
+    """
+    from app.services.execution_service import WorkflowExecutionService
+
+    return WorkflowExecutionService()
+
+
+
+# =============================================================================
+# AUTHENTICATION FIXTURES FOR SCHEDULE API TESTS
+# =============================================================================
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_user(db_session: AsyncSession) -> User:
+    """Create a test user for authentication.
+
+    Returns:
+        User: A test user with admin privileges.
+
+    Example:
+        async def test_with_user(test_user):
+            assert test_user.email == "admin@localhost"
+    """
+    from app.models.user import User
+    from app.core.security import hash_password
+
+    user = User(
+        id=uuid4(),
+        email="admin@localhost",
+        hashed_password=hash_password("test_password"),
+    )
+    db_session.add(user)
+    await db_session.flush()
+    return user
+
+
+@pytest_asyncio.fixture(scope="function")
+async def async_client_auth(
+    db_session: AsyncSession,
+    test_user: User,
+) -> AsyncGenerator[AsyncClient]:
+    """Async HTTP client with authentication override for testing.
+
+    This fixture overrides the CurrentUser dependency to provide authentication
+    without requiring JWT tokens. This allows testing authenticated endpoints
+    without the complexity of token management.
+
+    Args:
+        db_session: The test database session.
+        test_user: The test user to authenticate as.
+
+    Yields:
+        AsyncClient: HTTP client configured with authenticated user.
+
+    Example:
+        async def test_create_schedule(async_client_auth):
+            response = await async_client_auth.post("/api/v1/schedules", ...)
+            assert response.status_code == 201
+    """
+    from app.db.session import get_db
+    from app.api.deps import get_current_user
+
+    async def override_get_db() -> AsyncGenerator[AsyncSession]:
+        """Override database dependency to use test session."""
+        yield db_session
+
+    async def override_get_current_user() -> User:
+        """Override authentication to return test user."""
+        return test_user
+
+    # Override the dependencies
+    app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    try:
+        transport = ASGITransport(app=cast(ASGIApp, app))
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            yield client
+    finally:
+        # Clean up dependency overrides after the test
+        app.dependency_overrides.clear()

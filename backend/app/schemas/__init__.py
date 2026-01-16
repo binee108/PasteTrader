@@ -63,6 +63,17 @@ from app.schemas.execution import (
     WorkflowExecutionWithNodes,
 )
 
+# Schedule schemas
+from app.schemas.schedule import (
+    ScheduleCreate,
+    ScheduleDetailResponse,
+    SchedulePaginatedResponse,
+    ScheduleResponse,
+    ScheduleStatistics,
+    ScheduleUpdate,
+    TriggerType,
+)
+
 # Tool schemas
 from app.schemas.tool import (
     ToolBase,
@@ -149,6 +160,14 @@ __all__ = [
     "WorkflowExecutionResponse",
     "WorkflowExecutionStatistics",
     "WorkflowExecutionWithNodes",
+    # Schedule schemas
+    "ScheduleCreate",
+    "ScheduleDetailResponse",
+    "SchedulePaginatedResponse",
+    "ScheduleResponse",
+    "ScheduleStatistics",
+    "ScheduleUpdate",
+    "TriggerType",
     # Tool schemas
     "ToolBase",
     "ToolCreate",
