@@ -16,10 +16,10 @@ including creating, listing, updating, deleting, pausing, and resuming schedules
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -37,6 +37,9 @@ from app.schemas.schedule import (
     ScheduleStatistics,
     ScheduleUpdate,
 )
+
+if TYPE_CHECKING:
+    pass
 
 # Optional import for apscheduler (not needed for basic CRUD)
 try:
@@ -237,13 +240,12 @@ def convert_trigger_type_to_schedule_type(
     """
     if trigger_type == "cron":
         return ScheduleType.CRON
-    elif trigger_type == "interval":
+    if trigger_type == "interval":
         return ScheduleType.INTERVAL
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid trigger_type: {trigger_type}",
-        )
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail=f"Invalid trigger_type: {trigger_type}",
+    )
 
 
 def build_schedule_config(
@@ -486,7 +488,7 @@ async def get_schedule(
     statistics = await calculate_schedule_statistics(db, schedule)
 
     # Build response
-    response_data = {
+    return {
         "id": schedule.id,
         "workflow_id": schedule.workflow_id,
         "user_id": schedule.user_id,
@@ -506,7 +508,6 @@ async def get_schedule(
         "statistics": statistics,
     }
 
-    return response_data
 
 
 # =============================================================================

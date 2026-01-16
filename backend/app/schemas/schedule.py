@@ -16,9 +16,9 @@ This module defines request/response schemas for schedule-related endpoints.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
@@ -30,6 +30,9 @@ from app.schemas.base import (
     BaseSchema,
     PaginatedResponse,
 )
+
+if TYPE_CHECKING:
+    pass
 
 # =============================================================================
 # Schedule Type Enum (Simplified for API)
@@ -355,19 +358,18 @@ class ScheduleUpdate(ScheduleConfigMixin):
     def validate_update_consistency(self) -> ScheduleUpdate:
         """Validate that updates are consistent."""
         # If cron_expression is being updated, ensure interval fields are not
-        if self.cron_expression is not None:
-            if any(
-                [
-                    self.interval_weeks,
-                    self.interval_days,
-                    self.interval_hours,
-                    self.interval_minutes,
-                    self.interval_seconds,
-                ]
-            ):
-                raise ValueError(
-                    "Cannot set both cron_expression and interval fields"
-                )
+        if self.cron_expression is not None and any(
+            [
+                self.interval_weeks,
+                self.interval_days,
+                self.interval_hours,
+                self.interval_minutes,
+                self.interval_seconds,
+            ]
+        ):
+            raise ValueError(
+                "Cannot set both cron_expression and interval fields"
+            )
 
         # If any interval field is being updated, ensure cron_expression is not
         if any(
@@ -378,11 +380,10 @@ class ScheduleUpdate(ScheduleConfigMixin):
                 self.interval_minutes,
                 self.interval_seconds,
             ]
-        ):
-            if self.cron_expression is not None:
-                raise ValueError(
-                    "Cannot set both cron_expression and interval fields"
-                )
+        ) and self.cron_expression is not None:
+            raise ValueError(
+                "Cannot set both cron_expression and interval fields"
+            )
 
         return self
 

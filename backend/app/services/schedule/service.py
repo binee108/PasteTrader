@@ -20,11 +20,9 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import and_, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy import func, select
 
 from app.models.enums import ExecutionHistoryStatus, ScheduleType
 from app.models.schedule import Schedule, ScheduleHistory
@@ -38,7 +36,10 @@ from app.schemas.schedule import (
     TriggerType,
 )
 from app.services.schedule.scheduler import PersistentScheduler
-from app.services.schedule.triggers import build_cron_trigger, build_interval_trigger
+from app.services.schedule.triggers import build_cron_trigger
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +129,7 @@ class ScheduleService:
         await db.flush()
 
         # Register with APScheduler
-        await self._register_job(db, schedule)
+        await self._register_job(schedule)
 
         await db.commit()
         await db.refresh(schedule)
@@ -281,7 +282,7 @@ class ScheduleService:
 
         # Re-register job if trigger changed
         if needs_reregister:
-            await self._register_job(db, schedule)
+            await self._register_job(schedule)
 
         await db.commit()
         await db.refresh(schedule)
@@ -401,7 +402,6 @@ class ScheduleService:
 
     async def _register_job(
         self,
-        db: AsyncSession,
         schedule: Schedule,
     ) -> None:
         """Register schedule with APScheduler.
@@ -420,29 +420,88 @@ class ScheduleService:
         # Build trigger based on schedule type
         job_id = str(schedule.id)
 
+        # Extract start_date and end_date from schedule_config
+        config = schedule.schedule_config or {}
+        from datetime import datetime
+
+        start_date = None
+        end_date = None
+        if config.get("start_date"):
+            start_date = datetime.fromisoformat(
+                config["start_date"].replace("Z", "+00:00")
+            )
+        if config.get("end_date"):
+            end_date = datetime.fromisoformat(config["end_date"].replace("Z", "+00:00"))
+
         if schedule.schedule_type == ScheduleType.CRON:
-            cron_expr = schedule.schedule_config.get("cron_expression")
+            # Parse cron expression to get components
+            cron_expr = config.get("cron_expression")
             if not cron_expr:
                 raise ValueError("Cron expression required for CRON schedules")
 
-            trigger = build_cron_trigger(cron_expr, schedule.timezone)
+            # Parse cron expression (standard 5-field format: minute hour day month day_of_week)
+            parts = cron_expr.split()
+            if len(parts) < 5:
+                raise ValueError(f"Invalid cron expression: {cron_expr}")
+
+            # Build trigger args from cron expression
+            trigger_args = {
+                "minute": parts[0],
+                "hour": parts[1],
+                "day": parts[2],
+                "month": parts[3],
+                "day_of_week": parts[4],
+            }
+            # Add optional start/end dates
+            if start_date:
+                trigger_args["start_date"] = start_date
+            if end_date:
+                trigger_args["end_date"] = end_date
+
+            await self.scheduler.add_cron_job(
+                job_func=self._execute_scheduled_workflow,
+                trigger_args=trigger_args,
+                job_id=job_id,
+                name=schedule.name,
+                schedule_id=str(schedule.id),
+            )
 
         elif schedule.schedule_type == ScheduleType.INTERVAL:
-            trigger = build_interval_trigger(
-                schedule.schedule_config, schedule.timezone
+            # Get interval configuration
+            seconds = config.get("seconds", 0)
+            minutes = config.get("minutes", 0)
+            hours = config.get("hours", 0)
+            days = config.get("days", 0)
+            weeks = config.get("weeks", 0)
+
+            # Build interval trigger args
+            trigger_args = {
+                "seconds": seconds,
+                "minutes": minutes,
+                "hours": hours,
+                "days": days,
+                "weeks": weeks,
+            }
+            # Add optional start/end dates and timezone
+            if start_date:
+                trigger_args["start_date"] = start_date
+            if end_date:
+                trigger_args["end_date"] = end_date
+            if schedule.timezone:
+                from zoneinfo import ZoneInfo
+
+                trigger_args["timezone"] = ZoneInfo(str(schedule.timezone))
+
+            await self.scheduler.add_interval_job(
+                job_func=self._execute_scheduled_workflow,
+                **trigger_args,
+                job_id=job_id,
+                name=schedule.name,
+                schedule_id=str(schedule.id),
             )
 
         else:
             raise ValueError(f"Unsupported schedule type: {schedule.schedule_type}")
-
-        # Register job
-        await self.scheduler.add_schedule_job(
-            job_func=self._execute_scheduled_workflow,
-            trigger=trigger,
-            job_id=job_id,
-            name=schedule.name,
-            kwargs={"schedule_id": str(schedule.id)},
-        )
 
         # Update schedule with job ID
         schedule.job_id = job_id
@@ -471,11 +530,8 @@ class ScheduleService:
         Raises:
             ValueError: If schedule not found
         """
-        from app.services.execution_service import WorkflowExecutionService
-
         # This would be called from the scheduler context
         # We need to create a new DB session
-        from sqlalchemy.ext.asyncio import async_sessionmaker
 
         # For now, return a mock execution ID
         # In production, this would create a new session and execute
@@ -522,9 +578,7 @@ class ScheduleService:
                 func.max(ScheduleHistory.triggered_at).label("last_run_at"),
                 # Get status of most recent execution
                 func.max(
-                    func.row_number().over(
-                        order_by=ScheduleHistory.triggered_at.desc()
-                    )
+                    func.row_number().over(order_by=ScheduleHistory.triggered_at.desc())
                 ).label("row_num"),
             )
             .where(ScheduleHistory.schedule_id == schedule_id)
