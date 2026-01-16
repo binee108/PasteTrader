@@ -65,7 +65,7 @@ class MetricsCollector:
     Provides thread-safe recording, querying, and aggregation of processor metrics.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._metrics: list[ProcessorMetrics] = []
         self._lock = threading.Lock()
 

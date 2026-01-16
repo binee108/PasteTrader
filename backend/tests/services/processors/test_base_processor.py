@@ -51,7 +51,8 @@ class MockProcessor(BaseProcessor):
             raise self.raise_error
 
         return ToolProcessorOutput(
-            result={"status": "success", "data": validated_input.model_dump()}
+            result={"status": "success", "data": validated_input.model_dump()},
+            execution_duration_ms=1.0,
         )
 
     async def post_process(self, output: ToolProcessorOutput) -> dict:
@@ -380,13 +381,23 @@ class TestBaseProcessorTimeout:
         """Test process is cancelled after timeout."""
         node = MockNode("test-node")
         context = ExecutionContext(execution_id=uuid4())
-        config = ProcessorConfig(timeout_seconds=0.1)  # 100ms timeout
+        config = ProcessorConfig(timeout_seconds=0, max_retries=0)  # Immediate timeout for testing
+
+        # Disable timeout for asyncio.wait_for by setting to 0
+        # Instead, test the actual timeout mechanism
+        from app.services.workflow.processors.errors import ProcessorTimeoutError
 
         async def slow_process(validated_input):
             await asyncio.sleep(0.2)  # Sleep longer than timeout
-            return ToolProcessorOutput(result={"status": "done"})
+            return ToolProcessorOutput(
+                result={"status": "done"},
+                execution_duration_ms=200.0,
+            )
 
         processor = MockProcessor(node, context, config)
+
+        # Override config to have actual timeout
+        processor.config.timeout_seconds = 0.1  # 100ms timeout
         processor.process = slow_process
 
         inputs = {
