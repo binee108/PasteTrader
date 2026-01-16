@@ -290,17 +290,20 @@ npm run dev
 
 - [Tool API Reference](docs/api/tools.md) - 도구 관리 API (7개 엔드포인트)
 - [Agent API Reference](docs/api/agents.md) - 에이전트 관리 API (8개 엔드포인트)
+- [Schedule API Reference](docs/api/schedules.md) - 스케줄 관리 API (7개 엔드포인트)
 - [Authentication Guide](docs/api/authentication.md) - JWT 인증 가이드
 
 ### 아키텍처 문서
 
 - [Tool-Agent Registry](docs/architecture/tool-agent-registry.md) - 도구/에이전트 레지스트리 아키텍처
+- [Schedule Management](docs/architecture/schedule-management.md) - 스케줄 관리 아키텍처
 - [JWT Auth Flow](docs/architecture/jwt-auth-flow.md) - JWT 인증 흐름
 
 ### 데이터베이스 스키마
 
 - [Tool Schema](docs/database/schemas/tool-schema.md) - 도구 데이터 모델
 - [Agent Schema](docs/database/schemas/agent-schema.md) - 에이전트 데이터 모델
+- [Schedule Schema](docs/database/schemas/schedule-schema.md) - 스케줄 데이터 모델
 - [모델 생성 가이드](docs/database/models.md)
 - [마이그레이션 가이드](docs/database/migrations.md)
 
@@ -314,6 +317,7 @@ npm run dev
 - [SPEC-006: Schedule Configuration Model](.moai/specs/SPEC-006/spec.md) - 구현 완료
 - [SPEC-007: Workflow API Endpoints](.moai/specs/SPEC-007/spec.md) - 구현 완료
 - [SPEC-009: Tool/Agent API Endpoints](.moai/specs/SPEC-009/spec.md) - 구현 완료
+- [SPEC-013: Schedule Management Service](.moai/specs/SPEC-013/SPEC.md) - 구현 완료
 
 ## 테스트
 
@@ -368,6 +372,14 @@ open htmlcov/index.html
   - 도구-에이전트 연결 관리 API
   - 85.60% 테스트 커버리지
   - bcrypt 기반 비밀번호 해싱
+- **SPEC-013**: Schedule Management Service (스케줄 관리 서비스)
+  - APScheduler 기반 지속성 스케줄링
+  - 7개 RESTful API 엔드포인트 (Create, Read, Update, Delete, Pause, Resume, List)
+  - Cron 및 Interval 트리거 지원
+  - PostgreSQL Job Store를 통한 서비스 재시작 후 스케줄 유지
+  - ScheduleHistory 모델을 통한 실행 이력 추적
+  - 117개 테스트 통과
+  - 인증, 소유권 검증, 보안 제어 구현
 
 ## 연락처
 
