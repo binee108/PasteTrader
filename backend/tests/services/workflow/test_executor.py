@@ -13,7 +13,7 @@ import pytest
 
 from app.models.enums import ExecutionStatus, NodeType, TriggerType
 from app.models.workflow import Edge, Node
-from app.services.workflow.exceptions import ExecutionCancelledError
+from app.services.workflow.exceptions import ExecutionCancelledError, NodeTimeoutError
 from app.services.workflow.executor import WorkflowExecutor
 
 
@@ -414,3 +414,464 @@ class TestWorkflowExecutorCancellationDuringExecution:
         # Verify execution was cancelled
         assert result.status == ExecutionStatus.FAILED
         assert "cancelled" in result.error_message.lower()
+
+
+class TestWorkflowExecutorNodeTimeout:
+    """Tests for node timeout handling.
+
+    TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+    REQ: REQ-011-008 - Node timeout handling
+    """
+
+    @pytest.mark.asyncio
+    async def test_node_timeout_raises_node_timeout_error(
+        self, db_session, workflow_factory, node_factory
+    ) -> None:
+        """Test that node execution raises NodeTimeoutError when timeout is exceeded.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-008 - Node timeout handling with asyncio.timeout()
+
+        Covers lines 290-291: TimeoutError exception handling that raises
+        NodeTimeoutError when asyncio.timeout() is exceeded.
+        """
+        import asyncio
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create a node with very short timeout and longer sleep time
+        # This simulates a slow-running node that exceeds its timeout
+        node = node_factory(
+            workflow_id=workflow.id,
+            name="Slow Node",
+            node_type=NodeType.TOOL,
+            config={
+                "timeout_seconds": 0.05,  # 50ms timeout
+                "sleep_seconds": 0.2,  # 200ms execution time (exceeds timeout)
+            },
+        )
+
+        db_session.add(workflow)
+        db_session.add(node)
+        await db_session.commit()
+
+        # Execute the node - should timeout and raise NodeTimeoutError
+        # This tests the actual asyncio.timeout() behavior in executor.py lines 290-291
+        with pytest.raises(NodeTimeoutError) as exc_info:
+            await executor._execute_node_with_timeout(node, {"test": "data"}, 1)
+
+        # Verify the error message contains timeout information
+        assert "timed out" in str(exc_info.value).lower()
+        assert str(node.id)[:8] in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_node_within_timeout_completes_successfully(
+        self, db_session, workflow_factory, node_factory
+    ) -> None:
+        """Test that node execution completes successfully within timeout.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-008 - Node timeout handling
+        """
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create a node with reasonable timeout
+        node = node_factory(
+            workflow_id=workflow.id,
+            name="Fast Node",
+            node_type=NodeType.TOOL,
+            config={"timeout_seconds": 5},  # 5 second timeout
+        )
+
+        db_session.add(workflow)
+        db_session.add(node)
+        await db_session.commit()
+
+        # Execute should complete within timeout
+        result = await executor.execute(
+            workflow_id=workflow.id,
+            input_data={"test": "data"},
+            trigger_type=TriggerType.MANUAL,
+        )
+
+        # Verify execution completed successfully
+        assert result.status == ExecutionStatus.COMPLETED
+
+
+class TestWorkflowExecutorRetryWithExponentialBackoff:
+    """Tests for exponential backoff retry mechanism.
+
+    TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+    REQ: REQ-011-004 - Exponential backoff retry
+    """
+
+    @pytest.mark.asyncio
+    async def test_retry_on_failure_with_exponential_backoff(
+        self, db_session, workflow_factory, node_factory
+    ) -> None:
+        """Test that failed node execution is retried with exponential backoff.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-004 - Retry with delay * (2 ** attempt)
+        """
+        import asyncio
+        from unittest.mock import AsyncMock, patch
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create a node with retry config
+        node = node_factory(
+            workflow_id=workflow.id,
+            name="Flaky Node",
+            node_type=NodeType.TOOL,
+            config={"retry_config": {"max_retries": 3, "delay": 0.01}},  # 10ms delay
+        )
+
+        db_session.add(workflow)
+        db_session.add(node)
+        await db_session.commit()
+
+        # Mock to simulate initial failure then success
+        attempt_count = [0]
+
+        async def flaky_execute(*args, **kwargs):
+            attempt_count[0] += 1
+            if attempt_count[0] <= 2:  # Fail first 2 attempts
+                raise Exception("Simulated failure")
+            return {"executed": True}
+
+        with patch.object(
+            executor, "_execute_node_with_timeout", side_effect=flaky_execute
+        ):
+            result = await executor.execute(
+                workflow_id=workflow.id,
+                input_data={"test": "data"},
+                trigger_type=TriggerType.MANUAL,
+            )
+
+        # Verify execution eventually succeeded after retries
+        assert result.status == ExecutionStatus.COMPLETED
+        assert attempt_count[0] == 3  # Initial attempt + 2 retries
+
+    @pytest.mark.asyncio
+    async def test_retry_respects_max_retries(
+        self, db_session, workflow_factory, node_factory
+    ) -> None:
+        """Test that retry mechanism respects max_retries configuration.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-004 - Node.retry_config max_retries
+        """
+        from unittest.mock import AsyncMock, patch
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create a node with retry config (max 2 retries)
+        node = node_factory(
+            workflow_id=workflow.id,
+            name="Failing Node",
+            node_type=NodeType.TOOL,
+            config={"retry_config": {"max_retries": 2, "delay": 0.01}},
+        )
+
+        db_session.add(workflow)
+        db_session.add(node)
+        await db_session.commit()
+
+        # Mock to always fail
+        attempt_count = [0]
+
+        async def always_failing_execute(*args, **kwargs):
+            attempt_count[0] += 1
+            raise Exception("Always fails")
+
+        with patch.object(
+            executor, "_execute_node_with_timeout", side_effect=always_failing_execute
+        ):
+            result = await executor.execute(
+                workflow_id=workflow.id,
+                input_data={"test": "data"},
+                trigger_type=TriggerType.MANUAL,
+            )
+
+        # Verify execution failed after max retries exceeded
+        assert result.status == ExecutionStatus.FAILED
+        assert attempt_count[0] == 3  # Initial + 2 retries (max_retries=2)
+
+    @pytest.mark.asyncio
+    async def test_retry_count_recorded_in_node_execution(
+        self, db_session, workflow_factory, node_factory
+    ) -> None:
+        """Test that retry_count is recorded in NodeExecution.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-004 - NodeExecution.retry_count tracking
+        """
+        from sqlalchemy import select
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create a node with retry config
+        node = node_factory(
+            workflow_id=workflow.id,
+            name="Retry Node",
+            node_type=NodeType.TOOL,
+            config={"retry_config": {"max_retries": 3, "delay": 0.01}},
+        )
+
+        db_session.add(workflow)
+        db_session.add(node)
+        await db_session.commit()
+
+        # Mock to simulate failure then success
+        attempt_count = [0]
+
+        async def retry_execute(*args, **kwargs):
+            attempt_count[0] += 1
+            if attempt_count[0] == 1:
+                raise Exception("First attempt fails")
+            return {"executed": True}
+
+        with patch.object(
+            executor, "_execute_node_with_timeout", side_effect=retry_execute
+        ):
+            result = await executor.execute(
+                workflow_id=workflow.id,
+                input_data={"test": "data"},
+                trigger_type=TriggerType.MANUAL,
+            )
+
+        # Verify execution succeeded
+        assert result.status == ExecutionStatus.COMPLETED
+
+        # Verify NodeExecution has retry_count recorded
+        from app.models.execution import NodeExecution
+
+        node_executions = await db_session.execute(
+            select(NodeExecution).where(
+                NodeExecution.workflow_execution_id == result.execution_id
+            )
+        )
+        node_execution = node_executions.scalars().first()
+
+        assert node_execution is not None
+        assert node_execution.retry_count == 1  # 1 retry occurred
+
+
+class TestWorkflowExecutorExecutionLogging:
+    """Tests for execution logging integration.
+
+    TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+    REQ: REQ-011-010 - ExecutionLog integration
+    """
+
+    @pytest.mark.asyncio
+    async def test_workflow_start_and_end_logs_created(
+        self, db_session, workflow_factory
+    ) -> None:
+        """Test that workflow execution creates start and end logs.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-010 - Workflow start/end logs
+        """
+        from sqlalchemy import select
+
+        from app.models.execution import ExecutionLog
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        db_session.add(workflow)
+        await db_session.commit()
+
+        # Execute workflow
+        result = await executor.execute(
+            workflow_id=workflow.id,
+            input_data={"test": "data"},
+            trigger_type=TriggerType.MANUAL,
+        )
+
+        # Verify logs were created
+        logs = await db_session.execute(
+            select(ExecutionLog).where(
+                ExecutionLog.workflow_execution_id == result.execution_id
+            )
+        )
+        execution_logs = logs.scalars().all()
+
+        # Should have at least start and end logs
+        assert len(execution_logs) >= 2
+
+        # Check for workflow start log
+        start_logs = [log for log in execution_logs if "start" in log.message.lower()]
+        assert len(start_logs) > 0
+
+        # Check for workflow end log
+        end_logs = [log for log in execution_logs if "complete" in log.message.lower()]
+        assert len(end_logs) > 0
+
+    @pytest.mark.asyncio
+    async def test_node_execution_logs_created(
+        self, db_session, workflow_factory, node_factory
+    ) -> None:
+        """Test that node execution creates start, complete, and failure logs.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-010 - Node execution start/complete/failure logs
+        """
+        from sqlalchemy import select
+
+        from app.models.execution import ExecutionLog
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create a node
+        node = node_factory(
+            workflow_id=workflow.id,
+            name="Test Node",
+            node_type=NodeType.TOOL,
+        )
+
+        db_session.add(workflow)
+        db_session.add(node)
+        await db_session.commit()
+
+        # Execute workflow
+        result = await executor.execute(
+            workflow_id=workflow.id,
+            input_data={"test": "data"},
+            trigger_type=TriggerType.MANUAL,
+        )
+
+        # Verify node execution logs were created
+        logs = await db_session.execute(
+            select(ExecutionLog).where(
+                ExecutionLog.workflow_execution_id == result.execution_id
+            )
+        )
+        execution_logs = logs.scalars().all()
+
+        # Should have logs for node execution
+        node_logs = [log for log in execution_logs if log.node_execution_id is not None]
+        assert len(node_logs) > 0
+
+    @pytest.mark.asyncio
+    async def test_error_logs_created_on_failure(
+        self, db_session, workflow_factory, node_factory
+    ) -> None:
+        """Test that ERROR level logs are created on failures.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-010 - ERROR level logs on errors
+        """
+        from app.models.enums import LogLevel
+        from app.models.execution import ExecutionLog
+        from sqlalchemy import select
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create a node with retry config that will fail
+        node = node_factory(
+            workflow_id=workflow.id,
+            name="Failing Node",
+            node_type=NodeType.TOOL,
+            config={"retry_config": {"max_retries": 1, "delay": 0.01}},
+        )
+
+        db_session.add(workflow)
+        db_session.add(node)
+        await db_session.commit()
+
+        # Mock to always fail
+        async def failing_execute(*args, **kwargs):
+            raise Exception("Simulated failure")
+
+        with patch.object(
+            executor, "_execute_node_with_timeout", side_effect=failing_execute
+        ):
+            result = await executor.execute(
+                workflow_id=workflow.id,
+                input_data={"test": "data"},
+                trigger_type=TriggerType.MANUAL,
+            )
+
+        # Verify execution failed
+        assert result.status == ExecutionStatus.FAILED
+
+        # Verify ERROR logs were created
+        logs = await db_session.execute(
+            select(ExecutionLog).where(
+                ExecutionLog.workflow_execution_id == result.execution_id,
+                ExecutionLog.level == LogLevel.ERROR,
+            )
+        )
+        error_logs = logs.scalars().all()
+
+        assert len(error_logs) > 0
+
+    @pytest.mark.asyncio
+    async def test_retry_logs_created_with_warn_level(
+        self, db_session, workflow_factory, node_factory
+    ) -> None:
+        """Test that WARN level logs are created during retries.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-010 - WARN level logs on retries
+        """
+        from app.models.enums import LogLevel
+        from app.models.execution import ExecutionLog
+        from sqlalchemy import select
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create a node with retry config
+        node = node_factory(
+            workflow_id=workflow.id,
+            name="Flaky Node",
+            node_type=NodeType.TOOL,
+            config={"retry_config": {"max_retries": 2, "delay": 0.01}},
+        )
+
+        db_session.add(workflow)
+        db_session.add(node)
+        await db_session.commit()
+
+        # Mock to fail then succeed
+        attempt_count = [0]
+
+        async def flaky_execute(*args, **kwargs):
+            attempt_count[0] += 1
+            if attempt_count[0] == 1:
+                raise Exception("First attempt fails")
+            return {"executed": True}
+
+        with patch.object(
+            executor, "_execute_node_with_timeout", side_effect=flaky_execute
+        ):
+            result = await executor.execute(
+                workflow_id=workflow.id,
+                input_data={"test": "data"},
+                trigger_type=TriggerType.MANUAL,
+            )
+
+        # Verify execution succeeded after retry
+        assert result.status == ExecutionStatus.COMPLETED
+
+        # Verify WARN logs were created for retry
+        logs = await db_session.execute(
+            select(ExecutionLog).where(
+                ExecutionLog.workflow_execution_id == result.execution_id,
+                ExecutionLog.level == LogLevel.WARNING,
+            )
+        )
+        warn_logs = logs.scalars().all()
+
+        assert len(warn_logs) > 0
