@@ -7,7 +7,7 @@ REQ: REQ-011-002 - asyncio.TaskGroup parallel execution
 
 import asyncio
 from unittest.mock import AsyncMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -413,6 +413,7 @@ class TestWorkflowExecutorCancellationDuringExecution:
 
         # Verify execution was cancelled
         assert result.status == ExecutionStatus.FAILED
+        assert result.error_message is not None
         assert "cancelled" in result.error_message.lower()
 
 
@@ -663,6 +664,380 @@ class TestWorkflowExecutorRetryWithExponentialBackoff:
         assert node_execution.retry_count == 1  # 1 retry occurred
 
 
+class TestWorkflowExecutorFailureIsolation:
+    """Tests for failure isolation policy.
+
+    TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+    REQ: REQ-011-005 - Failure isolation policy
+    """
+
+    @pytest.mark.asyncio
+    async def test_single_node_failure_blocks_downstream(
+        self, db_session, workflow_factory, node_factory, edge_factory
+    ) -> None:
+        """Test that a single node failure blocks all downstream nodes.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-005 - Failed node blocks downstream nodes
+        """
+        from sqlalchemy import select
+        from app.models.execution import NodeExecution
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create a linear chain: A -> B -> C
+        node_a = node_factory(
+            workflow_id=workflow.id,
+            name="Node A",
+            node_type=NodeType.TOOL,
+            config={"sleep_seconds": 0.01},
+        )
+        node_b = node_factory(
+            workflow_id=workflow.id,
+            name="Node B (Fails)",
+            node_type=NodeType.TOOL,
+            config={"sleep_seconds": 0.01},
+        )
+        node_c = node_factory(
+            workflow_id=workflow.id,
+            name="Node C",
+            node_type=NodeType.TOOL,
+            config={"sleep_seconds": 0.01},
+        )
+
+        # Create edges: A -> B -> C
+        edge_ab = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=node_a.id,
+            target_node_id=node_b.id,
+        )
+        edge_bc = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=node_b.id,
+            target_node_id=node_c.id,
+        )
+
+        db_session.add_all([workflow, node_a, node_b, node_c, edge_ab, edge_bc])
+        await db_session.commit()
+
+        # Mock to make node_b fail
+        async def failing_execute(*args, **kwargs):
+            if args and len(args) > 0 and hasattr(args[0], "name"):
+                if args[0].name == "Node B (Fails)":
+                    raise Exception("Simulated failure")
+            return {"executed": True}
+
+        with patch.object(
+            executor, "_execute_node_with_timeout", side_effect=failing_execute
+        ):
+            result = await executor.execute(
+                workflow_id=workflow.id,
+                input_data={"test": "data"},
+                trigger_type=TriggerType.MANUAL,
+            )
+
+        # Verify execution failed
+        assert result.status == ExecutionStatus.FAILED
+
+        # Verify node statuses
+        node_executions = await db_session.execute(
+            select(NodeExecution).where(
+                NodeExecution.workflow_execution_id == result.execution_id
+            )
+        )
+        executions_by_node = {ne.node_id: ne for ne in node_executions.scalars().all()}
+
+        # Node A should be COMPLETED (executed before B)
+        assert executions_by_node[node_a.id].status == ExecutionStatus.COMPLETED
+
+        # Node B should be FAILED
+        assert executions_by_node[node_b.id].status == ExecutionStatus.FAILED
+
+        # Node C should be SKIPPED (downstream of failed B)
+        assert executions_by_node[node_c.id].status == ExecutionStatus.SKIPPED
+
+    @pytest.mark.asyncio
+    async def test_multiple_failures_block_all_downstream(
+        self, db_session, workflow_factory, node_factory, edge_factory
+    ) -> None:
+        """Test that multiple node failures block all downstream nodes.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-005 - Multiple failed nodes block all downstream
+        """
+        from sqlalchemy import select
+        from app.models.execution import NodeExecution
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create a diamond pattern: A -> B -> D
+        #                          -> C -> D
+        node_a = node_factory(
+            workflow_id=workflow.id,
+            name="Node A",
+            node_type=NodeType.TOOL,
+        )
+        node_b = node_factory(
+            workflow_id=workflow.id,
+            name="Node B (Fails)",
+            node_type=NodeType.TOOL,
+        )
+        node_c = node_factory(
+            workflow_id=workflow.id,
+            name="Node C (Fails)",
+            node_type=NodeType.TOOL,
+        )
+        node_d = node_factory(
+            workflow_id=workflow.id,
+            name="Node D",
+            node_type=NodeType.TOOL,
+        )
+
+        # Create edges
+        edge_ab = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=node_a.id,
+            target_node_id=node_b.id,
+        )
+        edge_ac = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=node_a.id,
+            target_node_id=node_c.id,
+        )
+        edge_bd = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=node_b.id,
+            target_node_id=node_d.id,
+        )
+        edge_cd = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=node_c.id,
+            target_node_id=node_d.id,
+        )
+
+        db_session.add_all(
+            [
+                workflow,
+                node_a,
+                node_b,
+                node_c,
+                node_d,
+                edge_ab,
+                edge_ac,
+                edge_bd,
+                edge_cd,
+            ]
+        )
+        await db_session.commit()
+
+        # Mock to make nodes B and C fail
+        async def failing_execute(*args, **kwargs):
+            if args and len(args) > 0 and hasattr(args[0], "name"):
+                if "Fails" in args[0].name:
+                    raise Exception("Simulated failure")
+            return {"executed": True}
+
+        with patch.object(
+            executor, "_execute_node_with_timeout", side_effect=failing_execute
+        ):
+            result = await executor.execute(
+                workflow_id=workflow.id,
+                input_data={"test": "data"},
+                trigger_type=TriggerType.MANUAL,
+            )
+
+        # Verify execution failed
+        assert result.status == ExecutionStatus.FAILED
+
+        # Verify node statuses
+        node_executions = await db_session.execute(
+            select(NodeExecution).where(
+                NodeExecution.workflow_execution_id == result.execution_id
+            )
+        )
+        executions_by_node = {ne.node_id: ne for ne in node_executions.scalars().all()}
+
+        # Node A should be COMPLETED
+        assert executions_by_node[node_a.id].status == ExecutionStatus.COMPLETED
+
+        # Nodes B and C should be FAILED
+        assert executions_by_node[node_b.id].status == ExecutionStatus.FAILED
+        assert executions_by_node[node_c.id].status == ExecutionStatus.FAILED
+
+        # Node D should be SKIPPED (downstream of both failed nodes)
+        assert executions_by_node[node_d.id].status == ExecutionStatus.SKIPPED
+
+    @pytest.mark.asyncio
+    async def test_independent_branches_continue_execution(
+        self, db_session, workflow_factory, node_factory, edge_factory
+    ) -> None:
+        """Test that independent branches continue when one branch fails.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-005 - Independent branches continue execution
+        """
+        from sqlalchemy import select
+        from app.models.execution import NodeExecution
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create two independent branches: A -> B (fails)
+        #                              C -> D (continues)
+        node_a = node_factory(
+            workflow_id=workflow.id,
+            name="Node A",
+            node_type=NodeType.TOOL,
+        )
+        node_b = node_factory(
+            workflow_id=workflow.id,
+            name="Node B (Fails)",
+            node_type=NodeType.TOOL,
+        )
+        node_c = node_factory(
+            workflow_id=workflow.id,
+            name="Node C",
+            node_type=NodeType.TOOL,
+        )
+        node_d = node_factory(
+            workflow_id=workflow.id,
+            name="Node D",
+            node_type=NodeType.TOOL,
+        )
+
+        # Create edges
+        edge_ab = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=node_a.id,
+            target_node_id=node_b.id,
+        )
+        edge_cd = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=node_c.id,
+            target_node_id=node_d.id,
+        )
+
+        db_session.add_all([workflow, node_a, node_b, node_c, node_d, edge_ab, edge_cd])
+        await db_session.commit()
+
+        # Mock to make node B fail
+        async def failing_execute(*args, **kwargs):
+            if args and len(args) > 0 and hasattr(args[0], "name"):
+                if args[0].name == "Node B (Fails)":
+                    raise Exception("Simulated failure")
+            return {"executed": True}
+
+        with patch.object(
+            executor, "_execute_node_with_timeout", side_effect=failing_execute
+        ):
+            result = await executor.execute(
+                workflow_id=workflow.id,
+                input_data={"test": "data"},
+                trigger_type=TriggerType.MANUAL,
+            )
+
+        # Verify node statuses
+        node_executions = await db_session.execute(
+            select(NodeExecution).where(
+                NodeExecution.workflow_execution_id == result.execution_id
+            )
+        )
+        executions_by_node = {ne.node_id: ne for ne in node_executions.scalars().all()}
+
+        # Nodes A and C should be COMPLETED (independent roots)
+        assert executions_by_node[node_a.id].status == ExecutionStatus.COMPLETED
+        assert executions_by_node[node_c.id].status == ExecutionStatus.COMPLETED
+
+        # Node B should be FAILED
+        assert executions_by_node[node_b.id].status == ExecutionStatus.FAILED
+
+        # Node D should be COMPLETED (independent branch)
+        assert executions_by_node[node_d.id].status == ExecutionStatus.COMPLETED
+
+    @pytest.mark.asyncio
+    async def test_blocked_nodes_logged_correctly(
+        self, db_session, workflow_factory, node_factory, edge_factory
+    ) -> None:
+        """Test that blocked nodes are logged with failure reasons.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-005 - Blocked nodes logged with failure reason
+        """
+        from sqlalchemy import select
+        from app.models.execution import ExecutionLog
+        from app.models.enums import LogLevel
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create a linear chain: A -> B -> C
+        node_a = node_factory(
+            workflow_id=workflow.id,
+            name="Node A",
+            node_type=NodeType.TOOL,
+        )
+        node_b = node_factory(
+            workflow_id=workflow.id,
+            name="Node B (Fails)",
+            node_type=NodeType.TOOL,
+        )
+        node_c = node_factory(
+            workflow_id=workflow.id,
+            name="Node C (Blocked)",
+            node_type=NodeType.TOOL,
+        )
+
+        # Create edges
+        edge_ab = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=node_a.id,
+            target_node_id=node_b.id,
+        )
+        edge_bc = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=node_b.id,
+            target_node_id=node_c.id,
+        )
+
+        db_session.add_all([workflow, node_a, node_b, node_c, edge_ab, edge_bc])
+        await db_session.commit()
+
+        # Mock to make node B fail
+        async def failing_execute(*args, **kwargs):
+            if args and len(args) > 0 and hasattr(args[0], "name"):
+                if args[0].name == "Node B (Fails)":
+                    raise Exception("Connection timeout")
+            return {"executed": True}
+
+        with patch.object(
+            executor, "_execute_node_with_timeout", side_effect=failing_execute
+        ):
+            result = await executor.execute(
+                workflow_id=workflow.id,
+                input_data={"test": "data"},
+                trigger_type=TriggerType.MANUAL,
+            )
+
+        # Verify blocked nodes were logged
+        logs = await db_session.execute(
+            select(ExecutionLog).where(
+                ExecutionLog.workflow_execution_id == result.execution_id,
+                ExecutionLog.level == LogLevel.WARNING,
+            )
+        )
+        warning_logs = logs.scalars().all()
+
+        # Should have warning log for blocked node
+        blocked_logs = [
+            log
+            for log in warning_logs
+            if "blocked" in log.message.lower() or "skipped" in log.message.lower()
+        ]
+        assert len(blocked_logs) > 0
+
+
 class TestWorkflowExecutorExecutionLogging:
     """Tests for execution logging integration.
 
@@ -875,3 +1250,475 @@ class TestWorkflowExecutorExecutionLogging:
         warn_logs = logs.scalars().all()
 
         assert len(warn_logs) > 0
+
+
+class TestWorkflowExecutorConditionRouting:
+    """Tests for condition node branching logic.
+
+    TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+    REQ: REQ-011-006 - Condition node branching
+    """
+
+    @pytest.mark.asyncio
+    async def test_condition_node_with_no_edges_returns_empty(
+        self, db_session, workflow_factory, node_factory
+    ) -> None:
+        """Test that condition node with no outgoing edges returns empty result.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-006 - Condition evaluation returns matched_edges
+        """
+        from app.models.workflow import NodeType
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create a condition node with no outgoing edges
+        condition_node = node_factory(
+            workflow_id=workflow.id,
+            name="Condition Node",
+            node_type=NodeType.CONDITION,
+            config={"condition": "price > 100"},
+        )
+
+        db_session.add(workflow)
+        db_session.add(condition_node)
+        await db_session.commit()
+
+        # Mock _evaluate_condition_node to test edge case
+        with patch.object(
+            executor,
+            "_evaluate_condition_node",
+            return_value={"matched_edges": [], "result": False},
+        ):
+            result = await executor._evaluate_condition_node(
+                node=condition_node,
+                context=await executor._create_execution_context(
+                    execution_id=uuid4(), input_data={}
+                ),
+            )
+
+        # Verify empty result for no edges
+        assert result["matched_edges"] == []
+        assert result["result"] is False
+
+    @pytest.mark.asyncio
+    async def test_condition_node_routing_excludes_non_matching_paths(
+        self, db_session, workflow_factory, node_factory, edge_factory
+    ) -> None:
+        """Test that non-matching paths are excluded from execution.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-006 - Path exclusion based on condition result
+        """
+        from app.models.workflow import NodeType
+        from app.services.workflow.graph import Graph
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create workflow: Condition -> A (matching)
+        #                      -> B (non-matching)
+        condition_node = node_factory(
+            workflow_id=workflow.id,
+            name="Condition",
+            node_type=NodeType.CONDITION,
+        )
+        node_a = node_factory(
+            workflow_id=workflow.id,
+            name="Node A (Match)",
+            node_type=NodeType.TOOL,
+        )
+        node_b = node_factory(
+            workflow_id=workflow.id,
+            name="Node B (No Match)",
+            node_type=NodeType.TOOL,
+        )
+
+        # Create edges
+        edge_to_a = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=condition_node.id,
+            target_node_id=node_a.id,
+            condition={"expression": "price > 100"},
+        )
+        edge_to_b = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=condition_node.id,
+            target_node_id=node_b.id,
+            condition={"expression": "price <= 100"},
+        )
+
+        db_session.add_all(
+            [workflow, condition_node, node_a, node_b, edge_to_a, edge_to_b]
+        )
+        await db_session.commit()
+
+        # Build graph
+        graph = Graph[UUID]()
+        graph.add_edge(condition_node.id, node_a.id)
+        graph.add_edge(condition_node.id, node_b.id)
+
+        node_map = {
+            condition_node.id: condition_node,
+            node_a.id: node_a,
+            node_b.id: node_b,
+        }
+
+        # Create edge_map for edge_id to target_node_id mapping
+        edge_map = {
+            edge_to_a.id: (edge_to_a.source_node_id, edge_to_a.target_node_id),
+            edge_to_b.id: (edge_to_b.source_node_id, edge_to_b.target_node_id),
+        }
+
+        # Apply condition routing (only edge_to_a matches)
+        matched_edges = [edge_to_a.id]
+        skipped_nodes = await executor._apply_condition_routing(
+            condition_node_id=condition_node.id,
+            matched_edges=matched_edges,
+            graph=graph,
+            node_map=node_map,
+            edge_map=edge_map,
+        )
+
+        # Verify Node B is skipped (non-matching path)
+        assert node_b.id in skipped_nodes
+        assert node_a.id not in skipped_nodes
+
+    @pytest.mark.asyncio
+    async def test_condition_routing_with_single_matching_edge(
+        self, db_session, workflow_factory, node_factory, edge_factory
+    ) -> None:
+        """Test condition routing with single matching edge.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-006 - Single edge matching
+        """
+        from app.models.workflow import NodeType
+        from app.services.workflow.graph import Graph
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create workflow with multiple edges
+        condition_node = node_factory(
+            workflow_id=workflow.id,
+            name="Condition",
+            node_type=NodeType.CONDITION,
+        )
+        node_a = node_factory(
+            workflow_id=workflow.id,
+            name="Node A",
+            node_type=NodeType.TOOL,
+        )
+        node_b = node_factory(
+            workflow_id=workflow.id,
+            name="Node B",
+            node_type=NodeType.TOOL,
+        )
+        node_c = node_factory(
+            workflow_id=workflow.id,
+            name="Node C",
+            node_type=NodeType.TOOL,
+        )
+
+        # Create edges
+        edge_a = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=condition_node.id,
+            target_node_id=node_a.id,
+        )
+        edge_b = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=condition_node.id,
+            target_node_id=node_b.id,
+        )
+        edge_c = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=condition_node.id,
+            target_node_id=node_c.id,
+        )
+
+        db_session.add_all(
+            [workflow, condition_node, node_a, node_b, node_c, edge_a, edge_b, edge_c]
+        )
+        await db_session.commit()
+
+        # Build graph
+        graph = Graph[UUID]()
+        graph.add_edge(condition_node.id, node_a.id)
+        graph.add_edge(condition_node.id, node_b.id)
+        graph.add_edge(condition_node.id, node_c.id)
+
+        node_map = {
+            condition_node.id: condition_node,
+            node_a.id: node_a,
+            node_b.id: node_b,
+            node_c.id: node_c,
+        }
+
+        # Create edge_map
+        edge_map = {
+            edge_a.id: (edge_a.source_node_id, edge_a.target_node_id),
+            edge_b.id: (edge_b.source_node_id, edge_b.target_node_id),
+            edge_c.id: (edge_c.source_node_id, edge_c.target_node_id),
+        }
+
+        # Only edge_b matches
+        matched_edges = [edge_b.id]
+        skipped_nodes = await executor._apply_condition_routing(
+            condition_node_id=condition_node.id,
+            matched_edges=matched_edges,
+            graph=graph,
+            node_map=node_map,
+            edge_map=edge_map,
+        )
+
+        # Verify nodes A and C are skipped
+        assert node_a.id in skipped_nodes
+        assert node_c.id in skipped_nodes
+        assert node_b.id not in skipped_nodes
+
+    @pytest.mark.asyncio
+    async def test_skipped_nodes_not_executed(
+        self, db_session, workflow_factory, node_factory, edge_factory
+    ) -> None:
+        """Test that SKIPPED nodes are not executed.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-006 - SKIPPED nodes excluded from execution levels
+        """
+        from sqlalchemy import select
+        from app.models.execution import NodeExecution
+        from app.models.workflow import NodeType
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create workflow: Trigger -> Condition -> A (executed)
+        #                                           -> B (skipped)
+        trigger_node = node_factory(
+            workflow_id=workflow.id,
+            name="Trigger",
+            node_type=NodeType.TRIGGER,
+        )
+        condition_node = node_factory(
+            workflow_id=workflow.id,
+            name="Condition",
+            node_type=NodeType.CONDITION,
+        )
+        node_a = node_factory(
+            workflow_id=workflow.id,
+            name="Node A",
+            node_type=NodeType.TOOL,
+        )
+        node_b = node_factory(
+            workflow_id=workflow.id,
+            name="Node B",
+            node_type=NodeType.TOOL,
+        )
+
+        # Create edges
+        edge_trigger_cond = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=trigger_node.id,
+            target_node_id=condition_node.id,
+        )
+        edge_cond_a = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=condition_node.id,
+            target_node_id=node_a.id,
+        )
+        edge_cond_b = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=condition_node.id,
+            target_node_id=node_b.id,
+        )
+
+        db_session.add_all(
+            [
+                workflow,
+                trigger_node,
+                condition_node,
+                node_a,
+                node_b,
+                edge_trigger_cond,
+                edge_cond_a,
+                edge_cond_b,
+            ]
+        )
+        await db_session.commit()
+
+        # Mock condition evaluation to only match edge to node_a
+        async def mock_evaluate_condition(node, context):
+            # Return only edge_cond_a as matching
+            return {"matched_edges": [edge_cond_a.id], "result": True}
+
+        with patch.object(
+            executor, "_evaluate_condition_node", side_effect=mock_evaluate_condition
+        ):
+            result = await executor.execute(
+                workflow_id=workflow.id,
+                input_data={"test": "data"},
+                trigger_type=TriggerType.MANUAL,
+            )
+
+        # Verify execution completed
+        assert result.status == ExecutionStatus.COMPLETED
+
+        # Verify node statuses
+        node_executions = await db_session.execute(
+            select(NodeExecution).where(
+                NodeExecution.workflow_execution_id == result.execution_id
+            )
+        )
+        executions_by_node = {ne.node_id: ne for ne in node_executions.scalars().all()}
+
+        # Trigger and Condition should be COMPLETED
+        assert executions_by_node[trigger_node.id].status == ExecutionStatus.COMPLETED
+        assert executions_by_node[condition_node.id].status == ExecutionStatus.COMPLETED
+
+        # Node A should be COMPLETED (matching path)
+        assert executions_by_node[node_a.id].status == ExecutionStatus.COMPLETED
+
+        # Node B should be SKIPPED (non-matching path)
+        assert executions_by_node[node_b.id].status == ExecutionStatus.SKIPPED
+
+    @pytest.mark.asyncio
+    async def test_evaluate_condition_node_with_non_condition_type(
+        self, db_session, workflow_factory, node_factory
+    ) -> None:
+        """Test that _evaluate_condition_node handles non-CONDITION nodes.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-006 - Condition evaluation for non-condition nodes
+        """
+        from app.models.workflow import NodeType
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        # Create a TOOL node (not CONDITION)
+        tool_node = node_factory(
+            workflow_id=workflow.id,
+            name="Tool Node",
+            node_type=NodeType.TOOL,
+        )
+
+        db_session.add(workflow)
+        db_session.add(tool_node)
+        await db_session.commit()
+
+        # Evaluate non-condition node
+        result = await executor._evaluate_condition_node(
+            node=tool_node,
+            context=await executor._create_execution_context(
+                execution_id=uuid4(), input_data={}
+            ),
+        )
+
+        # Verify empty result for non-condition node
+        assert result["matched_edges"] == []
+        assert result["result"] is False
+
+    @pytest.mark.asyncio
+    async def test_apply_condition_routing_with_none_edge_map(
+        self, db_session, workflow_factory, node_factory
+    ) -> None:
+        """Test that _apply_condition_routing handles None edge_map.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-006 - Edge map None handling
+        """
+        from app.models.workflow import NodeType
+        from app.services.workflow.graph import Graph
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        condition_node = node_factory(
+            workflow_id=workflow.id,
+            name="Condition",
+            node_type=NodeType.CONDITION,
+        )
+
+        db_session.add(workflow)
+        db_session.add(condition_node)
+        await db_session.commit()
+
+        # Build graph
+        graph = Graph[UUID]()
+        graph.add_edge(condition_node.id, uuid4())  # Dummy edge
+
+        node_map = {condition_node.id: condition_node}
+
+        # Call with edge_map=None
+        skipped_nodes = await executor._apply_condition_routing(
+            condition_node_id=condition_node.id,
+            matched_edges=[],
+            graph=graph,
+            node_map=node_map,
+            edge_map=None,
+        )
+
+        # Verify empty result (no skipping without edge_map)
+        assert len(skipped_nodes) == 0
+
+    @pytest.mark.asyncio
+    async def test_apply_condition_routing_with_unknown_edges(
+        self, db_session, workflow_factory, node_factory, edge_factory
+    ) -> None:
+        """Test that _apply_condition_routing handles unknown edge IDs.
+
+        TAG: [SPEC-011] [EXECUTION] [EXECUTOR] [TEST]
+        REQ: REQ-011-006 - Unknown edge ID handling
+        """
+        from app.models.workflow import NodeType
+        from app.services.workflow.graph import Graph
+
+        executor = WorkflowExecutor(db=db_session)
+        workflow = workflow_factory()
+
+        condition_node = node_factory(
+            workflow_id=workflow.id,
+            name="Condition",
+            node_type=NodeType.CONDITION,
+        )
+        node_a = node_factory(
+            workflow_id=workflow.id,
+            name="Node A",
+            node_type=NodeType.TOOL,
+        )
+
+        edge_to_a = edge_factory(
+            workflow_id=workflow.id,
+            source_node_id=condition_node.id,
+            target_node_id=node_a.id,
+        )
+
+        db_session.add_all([workflow, condition_node, node_a, edge_to_a])
+        await db_session.commit()
+
+        # Build graph
+        graph = Graph[UUID]()
+        graph.add_edge(condition_node.id, node_a.id)
+
+        node_map = {condition_node.id: condition_node, node_a.id: node_a}
+
+        # Create edge_map (only contains edge_to_a)
+        edge_map = {
+            edge_to_a.id: (edge_to_a.source_node_id, edge_to_a.target_node_id),
+        }
+
+        # Pass unknown edge ID in matched_edges
+        unknown_edge_id = uuid4()
+        skipped_nodes = await executor._apply_condition_routing(
+            condition_node_id=condition_node.id,
+            matched_edges=[unknown_edge_id],  # Unknown edge
+            graph=graph,
+            node_map=node_map,
+            edge_map=edge_map,
+        )
+
+        # Verify node_a is skipped (unknown edge treated as non-matching)
+        assert node_a.id in skipped_nodes

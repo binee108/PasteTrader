@@ -11,7 +11,6 @@ respective base exceptions for consistent error handling.
 from typing import Any
 from uuid import UUID
 
-
 # ============================================================================
 # DAG Validation Exceptions (SPEC-010)
 # ============================================================================
@@ -25,6 +24,7 @@ class DAGValidationError(Exception):
         message: Human-readable error message.
         error_code: Machine-readable error code for API responses.
         details: Additional error context as dictionary.
+
     """
 
     def __init__(
@@ -46,6 +46,7 @@ class CycleDetectedError(DAGValidationError):
 
     Attributes:
         cycle_path: List of node IDs forming the cycle.
+
     """
 
     def __init__(self, cycle_path: list[UUID]) -> None:
@@ -65,6 +66,7 @@ class InvalidNodeReferenceError(DAGValidationError):
 
     Attributes:
         missing_nodes: List of node IDs that were not found.
+
     """
 
     def __init__(self, node_ids: list[UUID]) -> None:
@@ -85,6 +87,7 @@ class GraphTooLargeError(DAGValidationError):
         current: Current count.
         limit: Maximum allowed limit.
         metric: Type of metric (nodes, edges, depth).
+
     """
 
     def __init__(self, current: int, limit: int, metric: str = "nodes") -> None:
@@ -105,6 +108,7 @@ class ValidationTimeoutError(DAGValidationError):
 
     Attributes:
         timeout_seconds: Timeout duration in seconds.
+
     """
 
     def __init__(self, timeout_seconds: float) -> None:
@@ -127,6 +131,7 @@ class ExecutionError(Exception):
 
     Attributes:
         message: Human-readable error message.
+
     """
 
     def __init__(self, message: str) -> None:
@@ -142,6 +147,7 @@ class NodeTimeoutError(ExecutionError):
     Attributes:
         node_id: ID of the node that timed out.
         timeout_seconds: Timeout duration in seconds.
+
     """
 
     def __init__(self, node_id: UUID, timeout_seconds: float) -> None:
@@ -160,6 +166,7 @@ class NodeExecutionError(ExecutionError):
         node_id: ID of the node that failed.
         message: Error message.
         original_error: The original exception that caused the failure.
+
     """
 
     def __init__(self, node_id: UUID, message: str, original_error: Exception | None = None) -> None:
@@ -177,6 +184,7 @@ class ExecutionCancelledError(ExecutionError):
 
     Attributes:
         execution_id: ID of the cancelled execution.
+
     """
 
     def __init__(self, execution_id: UUID) -> None:
@@ -193,6 +201,7 @@ class ConditionEvaluationError(ExecutionError):
     Attributes:
         node_id: ID of the condition node that failed.
         reason: Reason for the evaluation failure.
+
     """
 
     def __init__(self, node_id: UUID, reason: str) -> None:
