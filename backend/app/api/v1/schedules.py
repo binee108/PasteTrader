@@ -21,13 +21,16 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentUser, DBSession, Pagination
+from app.api.deps import (  # noqa: TC001 (FastAPI runtime dependencies)
+    CurrentUser,
+    DBSession,
+    Pagination,
+)
 from app.models.enums import ScheduleType
 from app.models.schedule import Schedule, ScheduleHistory
-from app.models.user import User
+from app.models.user import User  # noqa: TC001 (FastAPI runtime dependencies)
 from app.models.workflow import Workflow
 from app.schemas.schedule import (
     ScheduleCreate,
@@ -39,7 +42,7 @@ from app.schemas.schedule import (
 )
 
 if TYPE_CHECKING:
-    pass
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 # Optional import for apscheduler (not needed for basic CRUD)
 try:
@@ -49,10 +52,10 @@ try:
     )
 except ImportError:
     # Fallback for testing without apscheduler
-    def build_cron_trigger(*args, **kwargs):  # type: ignore
+    def build_cron_trigger(*_args: object, **_kwargs: object) -> object:  # type: ignore
         return None
 
-    def build_interval_trigger(*args, **kwargs):  # type: ignore
+    def build_interval_trigger(*_args: object, **_kwargs: object) -> object:  # type: ignore
         return None
 
 
@@ -507,7 +510,6 @@ async def get_schedule(
         "updated_at": schedule.updated_at,
         "statistics": statistics,
     }
-
 
 
 # =============================================================================

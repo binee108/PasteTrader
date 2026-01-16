@@ -7,13 +7,13 @@ REQ: REQ-003 - ExecutionLog Endpoint Tests
 """
 
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 from fastapi import status
 from httpx import AsyncClient
-from unittest.mock import MagicMock, AsyncMock, patch
 
 # =============================================================================
 # Module-Level Async Fixtures
@@ -1005,7 +1005,6 @@ class TestExecutionAPIExceptionHandling:
         Covers lines 276-281 in executions.py where
         WorkflowExecutionService.get returns None.
         """
-        from unittest.mock import AsyncMock, patch
 
         execution_id = uuid4()
 
@@ -1028,7 +1027,6 @@ class TestExecutionAPIExceptionHandling:
         Covers lines 307-311 in executions.py where
         WorkflowExecutionService.get_with_nodes returns None.
         """
-        from unittest.mock import AsyncMock, patch
 
         execution_id = uuid4()
 
@@ -1053,7 +1051,6 @@ class TestExecutionAPIExceptionHandling:
         Covers lines 370-375 in executions.py where ValueError with
         'not found' is caught.
         """
-        from unittest.mock import AsyncMock, patch
 
         execution_id = uuid4()
 
@@ -1078,7 +1075,6 @@ class TestExecutionAPIExceptionHandling:
         Covers lines 376-380 in executions.py where ValueError without
         'not found' is caught.
         """
-        from unittest.mock import AsyncMock, patch
 
         execution_id = uuid4()
 
@@ -1103,7 +1099,6 @@ class TestExecutionAPIExceptionHandling:
         Covers lines 407-413 in executions.py where
         WorkflowExecutionService.get_statistics returns None.
         """
-        from unittest.mock import AsyncMock, patch
 
         execution_id = uuid4()
 
@@ -1127,7 +1122,6 @@ class TestExecutionAPIExceptionHandling:
         Covers lines 449-453 in executions.py where
         WorkflowExecutionService.get returns None.
         """
-        from unittest.mock import AsyncMock, patch
 
         execution_id = uuid4()
 
@@ -1151,7 +1145,6 @@ class TestExecutionAPIExceptionHandling:
         Covers lines 501-505 in executions.py where
         WorkflowExecutionService.get returns None.
         """
-        from unittest.mock import AsyncMock, patch
 
         execution_id = uuid4()
         node_execution_id = uuid4()
@@ -1176,7 +1169,6 @@ class TestExecutionAPIExceptionHandling:
         Covers lines 559-563 in executions.py where
         WorkflowExecutionService.get returns None.
         """
-        from unittest.mock import AsyncMock, patch
 
         execution_id = uuid4()
 

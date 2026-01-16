@@ -79,7 +79,7 @@ class ToolCreate(ToolBase):
     """Schema for creating a new tool."""
 
     @model_validator(mode="after")
-    def validate_tool_config(self) -> "ToolCreate":
+    def validate_tool_config(self) -> ToolCreate:
         """도구 타입별 필수 필드를 검증합니다.
 
         각 도구 타입에 필요한 필드가 config에 포함되어 있는지 확인합니다.

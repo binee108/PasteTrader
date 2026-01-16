@@ -11,7 +11,7 @@ following TDD RED-GREEN-REFACTOR cycle.
 
 from datetime import datetime
 from unittest.mock import MagicMock
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
@@ -25,7 +25,6 @@ from app.schemas.agent import (
     AgentUpdate,
     ModelConfig,
 )
-
 
 # =============================================================================
 # ModelConfig Tests
@@ -427,7 +426,7 @@ class TestAgentResponse:
         # Note: This test expects from_attributes to work
         # Actual implementation will need to handle model_config mapping
         # This test documents the expected behavior
-        pass  # Implementation will validate this
+        # Implementation will validate this
 
     def test_agent_response_optional_updated_at(self):
         """Test AgentResponse with optional updated_at."""

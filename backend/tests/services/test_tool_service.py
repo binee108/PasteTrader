@@ -13,7 +13,6 @@ import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.enums import ToolType
-from app.models.tool import Tool
 from app.schemas.tool import ToolCreate, ToolUpdate
 from app.services.tool_service import (
     ToolExecutionError,
@@ -21,7 +20,6 @@ from app.services.tool_service import (
     ToolService,
     ToolServiceError,
 )
-
 
 # =============================================================================
 # ToolService CRUD Tests

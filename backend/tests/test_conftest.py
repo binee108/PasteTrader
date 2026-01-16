@@ -72,7 +72,7 @@ class TestAsyncEngine:
     @pytest_asyncio.fixture
     async def engine_instance(
         self, async_engine: AsyncEngine
-    ) -> AsyncGenerator[AsyncEngine, None]:
+    ) -> AsyncGenerator[AsyncEngine]:
         """Provide the engine instance for testing."""
         yield async_engine
 

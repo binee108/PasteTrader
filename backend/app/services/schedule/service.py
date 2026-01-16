@@ -17,12 +17,13 @@ CRUD operations, job registration with APScheduler, and workflow execution.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
 from app.models.enums import ExecutionHistoryStatus, ScheduleType
 from app.models.schedule import Schedule, ScheduleHistory
@@ -412,18 +413,14 @@ class ScheduleService:
         """
         # Remove existing job if present
         if schedule.job_id:
-            try:
+            with contextlib.suppress(Exception):
                 await self.scheduler.remove_job(schedule.job_id)
-            except Exception:
-                pass  # Job may not exist
 
         # Build trigger based on schedule type
         job_id = str(schedule.id)
 
         # Extract start_date and end_date from schedule_config
         config = schedule.schedule_config or {}
-        from datetime import datetime
-
         start_date = None
         end_date = None
         if config.get("start_date"):
@@ -715,7 +712,3 @@ class ScheduleService:
             return True
         except Exception:
             return False
-
-
-# Helper for case expression in statistics query
-from sqlalchemy import case  # noqa: E402

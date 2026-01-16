@@ -9,10 +9,10 @@ REQ: REQ-013-006 (AsyncIOScheduler Configuration)
 
 from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from zoneinfo import ZoneInfo
 
 
 def build_cron_trigger(

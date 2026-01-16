@@ -506,8 +506,8 @@ class TestSessionFactoryExceptionHandling:
         Covers lines 75-77 in session.py where exception handling
         triggers rollback and re-raises.
         """
-        import asyncio
-        from unittest.mock import AsyncMock, patch, MagicMock
+        from unittest.mock import AsyncMock, MagicMock
+
         from app.db.session import get_db
 
         # Create a mock session that raises an exception
@@ -549,8 +549,7 @@ class TestSessionFactoryExceptionHandling:
 
         Tests that get_db properly handles session creation and cleanup.
         """
-        from unittest.mock import AsyncMock, MagicMock, patch
-        from app.db.session import get_db, async_session
+        from app.db.session import get_db
 
         # Test that get_db is a valid async generator
         gen = get_db()

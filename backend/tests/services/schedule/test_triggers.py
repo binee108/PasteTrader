@@ -5,7 +5,6 @@ TAG: SPEC-013-TASK-006-TEST-001
 REQ: REQ-013-006 (AsyncIOScheduler Configuration)
 """
 
-import pytest
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 

@@ -22,7 +22,6 @@ import pytest
 from app.services.workflow.algorithms import GraphAlgorithms
 from app.services.workflow.graph import Graph
 
-
 # =============================================================================
 # TEST FIXTURES
 # =============================================================================

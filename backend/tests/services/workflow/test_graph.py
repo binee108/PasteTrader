@@ -6,7 +6,6 @@ Test suite for the directed graph implementation including node/edge operations,
 traversal methods, and property access.
 """
 
-import pytest
 from uuid import uuid4
 
 from app.services.workflow.graph import Graph

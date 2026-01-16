@@ -22,7 +22,6 @@ from app.services.agent_service import (
     ToolAlreadyAssociatedError,
 )
 
-
 # =============================================================================
 # AgentService CRUD Tests
 # =============================================================================

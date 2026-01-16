@@ -6,13 +6,13 @@ REQ: REQ-002 - Agent Tool Association Tests
 REQ: REQ-003 - Agent Filtering Tests
 """
 
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 import pytest_asyncio
 from fastapi import status
 from httpx import AsyncClient
-from unittest.mock import MagicMock, AsyncMock, patch
 
 # =============================================================================
 # Module-Level Fixtures
@@ -381,7 +381,7 @@ class TestAgentAPIExceptionHandling:
         Tests lines 122-126 in agents.py where generic Exception
         is caught and converted to HTTP 500.
         """
-        from unittest.mock import AsyncMock, MagicMock, patch
+        from unittest.mock import MagicMock, patch
 
         mock_service = MagicMock()
         mock_service.list.side_effect = Exception("Database connection failed")

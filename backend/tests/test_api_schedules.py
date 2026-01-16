@@ -12,7 +12,6 @@ REQ: REQ-013-019 - Resume Schedule (POST /api/v1/schedules/{id}/resume)
 SECURITY: Updated to require authentication for all endpoints.
 """
 
-from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest

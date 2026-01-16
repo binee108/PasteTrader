@@ -21,7 +21,6 @@ from uuid import UUID, uuid4
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from starlette.types import ASGIApp
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -30,6 +29,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import Session
+from starlette.types import ASGIApp
 
 # Import app (required for async_client fixture)
 from app.main import app
@@ -291,7 +291,7 @@ async def async_client(
     app.dependency_overrides[get_db] = override_get_db
 
     try:
-        transport = ASGITransport(app=cast(ASGIApp, app))
+        transport = ASGITransport(app=cast("ASGIApp", app))
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             yield client
     finally:
@@ -1212,6 +1212,7 @@ def schedule_service():
             assert result.name == "Test Schedule"
     """
     from unittest.mock import MagicMock
+
     from app.services.schedule.service import ScheduleService
 
     # Create mock scheduler to avoid apscheduler dependency
@@ -1278,8 +1279,8 @@ async def test_user(db_session: AsyncSession) -> User:
         async def test_with_user(test_user):
             assert test_user.email == "admin@localhost"
     """
-    from app.models.user import User
     from app.core.security import hash_password
+    from app.models.user import User
 
     user = User(
         id=uuid4(),
@@ -1314,8 +1315,8 @@ async def async_client_auth(
             response = await async_client_auth.post("/api/v1/schedules", ...)
             assert response.status_code == 201
     """
-    from app.db.session import get_db
     from app.api.deps import get_current_user
+    from app.db.session import get_db
 
     async def override_get_db() -> AsyncGenerator[AsyncSession]:
         """Override database dependency to use test session."""
@@ -1330,7 +1331,7 @@ async def async_client_auth(
     app.dependency_overrides[get_current_user] = override_get_current_user
 
     try:
-        transport = ASGITransport(app=cast(ASGIApp, app))
+        transport = ASGITransport(app=cast("ASGIApp", app))
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             yield client
     finally:

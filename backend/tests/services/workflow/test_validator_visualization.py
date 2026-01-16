@@ -14,13 +14,12 @@ Test coverage for:
 Uses RED-GREEN-REFACTOR TDD cycle.
 """
 
-from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 
 from app.models.enums import NodeType
-from app.models.workflow import Edge, Node, Workflow
+from app.models.workflow import Edge, Node
 from app.schemas.validation import (
     ValidationErrorCode,
     ValidationLevel,

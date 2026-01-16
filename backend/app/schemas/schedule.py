@@ -16,13 +16,13 @@ This module defines request/response schemas for schedule-related endpoints.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime  # noqa: TC003
 from enum import Enum
-from typing import TYPE_CHECKING, Any
-from uuid import UUID
+from typing import Any
+from uuid import UUID  # noqa: TC003
 
 from pydantic import Field, field_validator, model_validator
-from pydantic.types import PositiveInt
+from pydantic.types import PositiveInt  # noqa: TC002
 
 from app.models.enums import ExecutionHistoryStatus, ScheduleType
 from app.schemas.base import (
@@ -30,9 +30,6 @@ from app.schemas.base import (
     BaseSchema,
     PaginatedResponse,
 )
-
-if TYPE_CHECKING:
-    pass
 
 # =============================================================================
 # Schedule Type Enum (Simplified for API)
@@ -149,8 +146,7 @@ class ScheduleConfigMixin(BaseSchema):
         default=None,
         max_length=100,
         description=(
-            "Cron expression (5 or 6 fields): "
-            "minute hour day month day-of-week [year]"
+            "Cron expression (5 or 6 fields): minute hour day month day-of-week [year]"
         ),
         examples=[
             "0 0 * * *",  # Daily at midnight
@@ -228,17 +224,16 @@ class ScheduleConfigMixin(BaseSchema):
                 for val in part.split(","):
                     cls._validate_cron_value(val.strip(), valid_ranges[i])
             elif "-" in part:
-                # Range: 1-5
                 range_parts = part.split("-")
                 if len(range_parts) != 2:
-                    raise ValueError(f"Invalid range in cron field {i+1}: {part}")
+                    raise ValueError(f"Invalid range in cron field {i + 1}: {part}")
                 cls._validate_cron_value(range_parts[0], valid_ranges[i])
                 cls._validate_cron_value(range_parts[1], valid_ranges[i])
             elif "/" in part:
                 # Step: */5 or 1-10/2
                 step_parts = part.split("/")
                 if len(step_parts) != 2:
-                    raise ValueError(f"Invalid step in cron field {i+1}: {part}")
+                    raise ValueError(f"Invalid step in cron field {i + 1}: {part}")
             else:
                 cls._validate_cron_value(part, valid_ranges[i])
 
@@ -295,9 +290,7 @@ class ScheduleCreate(ScheduleBase, ScheduleConfigMixin):
                     self.interval_seconds,
                 ]
             ):
-                raise ValueError(
-                    "Interval fields cannot be set for CRON trigger type"
-                )
+                raise ValueError("Interval fields cannot be set for CRON trigger type")
         elif self.trigger_type == TriggerType.INTERVAL:
             # At least one interval field must be set
             if not any(
@@ -367,23 +360,22 @@ class ScheduleUpdate(ScheduleConfigMixin):
                 self.interval_seconds,
             ]
         ):
-            raise ValueError(
-                "Cannot set both cron_expression and interval fields"
-            )
+            raise ValueError("Cannot set both cron_expression and interval fields")
 
         # If any interval field is being updated, ensure cron_expression is not
-        if any(
-            [
-                self.interval_weeks,
-                self.interval_days,
-                self.interval_hours,
-                self.interval_minutes,
-                self.interval_seconds,
-            ]
-        ) and self.cron_expression is not None:
-            raise ValueError(
-                "Cannot set both cron_expression and interval fields"
+        if (
+            any(
+                [
+                    self.interval_weeks,
+                    self.interval_days,
+                    self.interval_hours,
+                    self.interval_minutes,
+                    self.interval_seconds,
+                ]
             )
+            and self.cron_expression is not None
+        ):
+            raise ValueError("Cannot set both cron_expression and interval fields")
 
         return self
 

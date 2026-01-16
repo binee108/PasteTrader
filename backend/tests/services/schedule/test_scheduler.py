@@ -5,18 +5,17 @@ TAG: SPEC-013-TASK-005-TEST-001
 REQ: REQ-013-006, REQ-013-007, REQ-013-008
 """
 
+from datetime import datetime
+
 import pytest
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
 from app.services.schedule.scheduler import PersistentScheduler
-from app.services.schedule.triggers import build_cron_trigger, build_interval_trigger
+from app.services.schedule.triggers import build_cron_trigger
 
 
 # 테스트용 더미 함수 (직렬화 가능)
 async def dummy_job_func():
     """테스트용 더미 작업 함수"""
-    pass
 
 
 class TestPersistentSchedulerInit:

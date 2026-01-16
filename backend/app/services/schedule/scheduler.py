@@ -11,17 +11,17 @@ PostgreSQL job store를 사용하여 스케줄을 영구적으로 저장합니�
 """
 
 import logging
-from datetime import datetime
-from typing import Any, Callable
+import os
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from pydantic import BaseModel
-from sqlalchemy.engine import URL
 
 from app.services.schedule.triggers import build_cron_trigger
-
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,8 @@ class PersistentScheduler:
         import tempfile
 
         self._config = SchedulerConfig(
-            db_url=db_url or "postgresql://paste_trader:password@localhost:5432/paste_trader",
+            db_url=db_url
+            or "postgresql://paste_trader:password@localhost:5432/paste_trader",
             timezone=timezone or "UTC",
         )
 
@@ -137,7 +138,7 @@ class PersistentScheduler:
         if "postgresql+asyncpg://" in async_url:
             return async_url.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
         # postgresql:// -> postgresql+psycopg2://
-        elif "postgresql://" in async_url and "+" not in async_url:
+        if "postgresql://" in async_url and "+" not in async_url:
             return async_url.replace("postgresql://", "postgresql+psycopg2://")
         return async_url
 
@@ -172,7 +173,7 @@ class PersistentScheduler:
 
     async def add_cron_job(
         self,
-        job_func: Callable,
+        job_func: Callable[..., Any],
         trigger_args: dict[str, Any],
         job_id: str,
         name: str | None = None,
@@ -205,11 +206,11 @@ class PersistentScheduler:
         )
 
         logger.info(f"Cron job added: {job_id}")
-        return job.id
+        return str(job.id)
 
     async def add_interval_job(
         self,
-        job_func: Callable,
+        job_func: Callable[..., Any],
         seconds: int = 0,
         minutes: int = 0,
         hours: int = 0,
@@ -256,7 +257,7 @@ class PersistentScheduler:
         )
 
         logger.info(f"Interval job added: {job.id}")
-        return job.id
+        return str(job.id)
 
     async def remove_job(self, job_id: str) -> bool:
         """
@@ -324,7 +325,7 @@ class PersistentScheduler:
             logger.warning(f"Failed to resume job: {job_id}")
             return False
 
-    async def get_job(self, job_id: str):
+    async def get_job(self, job_id: str) -> Any | None:
         """
         작업을 조회합니다.
 
@@ -341,7 +342,7 @@ class PersistentScheduler:
         except Exception:
             return None
 
-    async def get_all_jobs(self) -> list:
+    async def get_all_jobs(self) -> list[Any]:
         """
         모든 작업을 조회합니다.
 
@@ -350,7 +351,8 @@ class PersistentScheduler:
         Returns:
             list[Job]: APScheduler Job 객체 리스트
         """
-        return self.scheduler.get_jobs()
+        jobs = self.scheduler.get_jobs()
+        return list(jobs) if jobs is not None else []
 
     async def get_next_run_time(self, job_id: str) -> datetime | None:
         """
@@ -366,13 +368,13 @@ class PersistentScheduler:
         """
         job = await self.get_job(job_id)
         if job:
-            return job.next_run_time
+            # Cast to datetime to satisfy mypy
+            return datetime.fromtimestamp(job.next_run_time.timestamp(), tz=UTC)
         return None
 
 
 # Singleton 인스턴스
 # TAG: SPEC-013-TASK-005-SINGLETON-001
-import os
 
 # 테스트 환경에서는 SQLite를 사용
 persistent_scheduler = PersistentScheduler(use_sqlite=os.getenv("TESTING") == "1")

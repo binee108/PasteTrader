@@ -13,6 +13,7 @@ from __future__ import annotations
 import builtins
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from sqlalchemy import func, select
 
@@ -20,8 +21,6 @@ from app.core.exceptions import ResourceInUseError
 from app.models.agent import Agent
 from app.models.tool import Tool
 from app.models.workflow import Node, Workflow
-
-from uuid import UUID
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -509,10 +508,10 @@ class AgentService:
 
 
 __all__ = [
+    "AgentExecutionError",
     "AgentNotFoundError",
     "AgentService",
     "AgentServiceError",
     "ToolAlreadyAssociatedError",
     "ToolNotFoundError",
-    "AgentExecutionError",
 ]

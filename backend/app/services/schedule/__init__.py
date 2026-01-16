@@ -27,8 +27,8 @@ __all__ = [
 # Try to import scheduler (may fail if DB not configured)
 try:
     from app.services.schedule.scheduler import (
-        PersistentScheduler,
-        persistent_scheduler,
+        PersistentScheduler,  # noqa: F401
+        persistent_scheduler,  # noqa: F401
     )
 
     __all__.extend(["PersistentScheduler", "persistent_scheduler"])
@@ -37,7 +37,7 @@ except ImportError:
 
 # Try to import service (may fail if dependencies not available)
 try:
-    from app.services.schedule.service import ScheduleService
+    from app.services.schedule.service import ScheduleService  # noqa: F401
 
     __all__.append("ScheduleService")
 except ImportError:

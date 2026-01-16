@@ -2113,6 +2113,7 @@ class TestWorkflowAPIExceptionHandlingExtended:
         is caught and converted to HTTP 400.
         """
         from unittest.mock import AsyncMock, MagicMock, patch
+
         from app.services.workflow_service import WorkflowServiceError
 
         workflow_data = {
@@ -2158,6 +2159,7 @@ class TestWorkflowAPIExceptionHandlingExtended:
         Tests delete workflow exception path in workflows.py.
         """
         from unittest.mock import AsyncMock, MagicMock, patch
+
         from app.services.workflow_service import WorkflowNotFoundError
 
         workflow_id = uuid4()

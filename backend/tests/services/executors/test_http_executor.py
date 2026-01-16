@@ -3,7 +3,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-import httpx
 
 from app.services.executors.http_executor import HttpToolExecutor
 

@@ -12,21 +12,18 @@ Test coverage for Redis-based caching of validation results:
 Uses RED-GREEN-REFACTOR TDD cycle with comprehensive edge cases.
 """
 
-from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
-from uuid import UUID, uuid4
+from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 
 from app.models.enums import NodeType
-from app.models.workflow import Edge, Node, Workflow
+from app.models.workflow import Edge, Node
 from app.schemas.validation import (
     ValidationLevel,
     ValidationOptions,
-    ValidationResult,
 )
 from app.services.workflow.validator import DAGValidator
-
 
 # =============================================================================
 # Test Constants
@@ -599,7 +596,6 @@ class TestCacheInvalidationHelpers:
         """
         # This test will be implemented when cache invalidation methods are added
         # For now, it documents the expected behavior
-        pass
 
     @pytest.mark.asyncio
     async def test_invalidate_all_workflow_caches(self, db_session, mock_redis):
@@ -611,4 +607,3 @@ class TestCacheInvalidationHelpers:
         """
         # This test will be implemented when cache invalidation methods are added
         # For now, it documents the expected behavior
-        pass

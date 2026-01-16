@@ -6,23 +6,19 @@ get_current_user_optional functions.
 TAG: [SPEC-009] [AUTH] [JWT] [TEST]
 """
 
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID, uuid4
+from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import (
-    CurrentUser,
-    CurrentUserOptional,
     get_current_user,
     get_current_user_optional,
 )
 from app.core.jwt import create_access_token
 from app.models.user import User
-
 
 # =============================================================================
 # Test Fixtures
@@ -309,6 +305,7 @@ class TestGetCurrentUser:
         """Test that token with invalid UUID raises 401."""
         # Create a token with an invalid subject (not a UUID)
         from jose import jwt
+
         from app.core.config import settings
 
         token = jwt.encode(
