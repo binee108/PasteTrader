@@ -259,6 +259,7 @@ npm run dev
 - [SPEC-007: Workflow API Endpoints](.moai/specs/SPEC-007/spec.md) - 구현 완료
 - [SPEC-009: Tool/Agent API Endpoints](.moai/specs/SPEC-009/spec.md) - 구현 완료
 - [SPEC-010: DAG Validation Service](.moai/specs/SPEC-010/spec.md) - 구현 완료
+- [SPEC-011: Workflow Execution Engine](.moai/specs/SPEC-011/SPEC.md) - 구현 진행 중
 
 ## 테스트
 
@@ -291,7 +292,7 @@ open htmlcov/index.html
 - [x] Phase 1: 워크플로우 코어 모델 (SPEC-003, SPEC-004, SPEC-007)
 - [x] Phase 2: 실행 추적 모델 (SPEC-005)
 - [x] Phase 3: API 파운데이션 (SPEC-007, SPEC-008, SPEC-009)
-- [ ] Phase 4: 워크플로우 엔진 (SPEC-010 구현 완료)
+- [ ] Phase 4: 워크플로우 엔진 (SPEC-010, SPEC-011 구현 진행 중)
 - [ ] Phase 5: LLM 통합
 - [ ] Phase 6: 콘텐츠 파싱
 - [ ] Phase 7: 프론트엔드 개발
@@ -316,6 +317,11 @@ open htmlcov/index.html
   - 4개 RESTful API 엔드포인트 구현
   - 1,351개 테스트 통과, 89.79% 코드 커버리지
   - 순환 감지, 위상 정렬, 검증기 그래프 구현
+- **SPEC-011**: Workflow Execution Engine (워크플로우 실행 엔진) - 구현 진행 중
+  - WorkflowExecutor 모듈: 317 lines, 71.56% 커버리지
+  - ExecutionContext 모듈: 157 lines, 100% 커버리지
+  - Execution 예외 클래스: 203 lines, 100% 커버리지
+  - 189개 테스트 전체 통과, REQ-011-006(조건 노드 분기)는 SPEC-012로 이관
 
 ## 연락처
 

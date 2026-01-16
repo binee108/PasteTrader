@@ -7,7 +7,7 @@
 | SPEC ID | SPEC-011 |
 | Title | Workflow Execution Engine |
 | Created | 2026-01-15 |
-| Status | Planned |
+| Status | In Progress |
 | Priority | High (P0) |
 | Lifecycle | spec-anchored |
 | Author | workflow-spec |
@@ -1077,4 +1077,5 @@ class ConditionEvaluationError(ExecutionError):
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| 1.1.0 | 2026-01-16 | workflow-tdd | WorkflowExecutor 구현 (REQ-011-001~005, 007~011), ExecutionContext 구현 (100% 커버리지), Execution 예외 클래스 구현 (100% 커버리지), REQ-011-006는 SPEC-012로 이관 |
 | 1.0.0 | 2026-01-15 | workflow-spec | Initial SPEC creation |

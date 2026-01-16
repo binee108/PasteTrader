@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- SPEC-011: Workflow Execution Engine 구현 진행 중
+  - WorkflowExecutor: DAG 기반 비동기 실행 엔진 (317 lines, 71.56% 커버리지)
+  - ExecutionContext: 노드 간 데이터 전달 컨텍스트 (157 lines, 100% 커버리지)
+  - Execution 예외 클래스: NodeTimeoutError, NodeExecutionError, ExecutionCancelledError 등 (203 lines, 100% 커버리지)
+  - asyncio.TaskGroup 기반 병렬 실행, 지수 백오프 재시도, 실패 격리 정책
+  - 189개 테스트 전체 통과 (REQ-011-001~005, 007~011 완료, REQ-011-006는 SPEC-012로 이관)
 - SPEC-009: Tool/Agent API Endpoints 구현 완료
   - Tool API: 7개 엔드포인트 (생성, 목록, 상세, 수정, 삭제, 테스트)
   - Agent API: 6개 엔드포인트 (생성, 목록, 상세, 수정, 삭제, 도구 연결, 테스트)
