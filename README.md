@@ -314,6 +314,7 @@ npm run dev
 - [SPEC-006: Schedule Configuration Model](.moai/specs/SPEC-006/spec.md) - 구현 완료
 - [SPEC-007: Workflow API Endpoints](.moai/specs/SPEC-007/spec.md) - 구현 완료
 - [SPEC-009: Tool/Agent API Endpoints](.moai/specs/SPEC-009/spec.md) - 구현 완료
+- [SPEC-012: Node Processor Framework](.moai/specs/SPEC-012/spec.md) - 구현 완료
 
 ## 테스트
 
@@ -368,6 +369,14 @@ open htmlcov/index.html
   - 도구-에이전트 연결 관리 API
   - 85.60% 테스트 커버리지
   - bcrypt 기반 비밀번호 해싱
+- **SPEC-012**: Node Processor Framework (노드 프로세서 프레임워크)
+  - BaseProcessor 추상 클래스 (lifecycle hooks)
+  - 6개 프로세서 타입 구현 (Tool, Agent, Condition, Adapter, Trigger, Aggregator)
+  - Processor error hierarchy (6개 예외 타입)
+  - MetricsCollector (thread-safe recording)
+  - ProcessorRegistry (동적 조회)
+  - Processor 스키마 (Pydantic 모델)
+  - 92% 테스트 커버리지 (66개 테스트 통과)
 
 ## 연락처
 
