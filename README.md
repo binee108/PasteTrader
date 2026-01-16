@@ -258,8 +258,12 @@ npm run dev
 - [SPEC-006: Schedule Configuration Model](.moai/specs/SPEC-006/spec.md) - 구현 완료
 - [SPEC-007: Workflow API Endpoints](.moai/specs/SPEC-007/spec.md) - 구현 완료
 - [SPEC-009: Tool/Agent API Endpoints](.moai/specs/SPEC-009/spec.md) - 구현 완료
+
+- [SPEC-012: Node Processor Framework](.moai/specs/SPEC-012/spec.md) - 구현 완료
+
 - [SPEC-010: DAG Validation Service](.moai/specs/SPEC-010/spec.md) - 구현 완료
 - [SPEC-011: Workflow Execution Engine](.moai/specs/SPEC-011/SPEC.md) - 구현 진행 중
+
 
 ## 테스트
 
@@ -310,6 +314,23 @@ open htmlcov/index.html
   - 938개 테스트 통과, 89.41% 코드 커버리지
   - DAG 검증, 페이지네이션, 배치 작업 지원
 - **SPEC-009**: Tool/Agent API Endpoints (도구/에이전트 관리 API)
+
+  - 15개 RESTful API 엔드포인트 구현 (도구 7개, 에이전트 8개)
+  - JWT 기반 인증 시스템 (python-jose)
+  - 5가지 도구 유형 지원 (http, mcp, python, shell, builtin)
+  - 3개 LLM 제공자 지원 (Anthropic, OpenAI, GLM)
+  - 도구-에이전트 연결 관리 API
+  - 85.60% 테스트 커버리지
+  - bcrypt 기반 비밀번호 해싱
+- **SPEC-012**: Node Processor Framework (노드 프로세서 프레임워크)
+  - BaseProcessor 추상 클래스 (lifecycle hooks)
+  - 6개 프로세서 타입 구현 (Tool, Agent, Condition, Adapter, Trigger, Aggregator)
+  - Processor error hierarchy (6개 예외 타입)
+  - MetricsCollector (thread-safe recording)
+  - ProcessorRegistry (동적 조회)
+  - Processor 스키마 (Pydantic 모델)
+  - 92% 테스트 커버리지 (66개 테스트 통과)
+
   - 13개 RESTful API 엔드포인트 구현
   - 28개 보안 테스트 통과, 100% 테스트 커버리지
   - bcrypt 기반 비밀번호 해싱, 직접 보안 모듈 구현
@@ -322,6 +343,7 @@ open htmlcov/index.html
   - ExecutionContext 모듈: 157 lines, 100% 커버리지
   - Execution 예외 클래스: 203 lines, 100% 커버리지
   - 189개 테스트 전체 통과, REQ-011-006(조건 노드 분기)는 SPEC-012로 이관
+
 
 ## 연락처
 

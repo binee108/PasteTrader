@@ -18,7 +18,7 @@ from sqlalchemy import func, select
 from app.core.exceptions import InvalidToolConfigError, ResourceInUseError
 from app.models.agent import Agent
 from app.models.tool import Tool
-from app.models.workflow import Workflow, Node
+from app.models.workflow import Node, Workflow
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -287,12 +287,12 @@ class ToolService:
         # X-002: 에이전트 및 워크플로우에서 사용 중인지 확인
         tool_id_str = str(tool_id)
         references = []
-        
+
         # 1. Agent 테이블의 tools 배열에서 확인
         agent_query = select(Agent).where(Agent.deleted_at.is_(None))
         agent_result = await self.db.execute(agent_query)
         agents = agent_result.scalars().all()
-        
+
         for agent in agents:
             if tool_id_str in agent.tools:
                 references.append({
@@ -300,7 +300,7 @@ class ToolService:
                     "id": str(agent.id),
                     "name": agent.name
                 })
-        
+
         # 2. Node 테이블에서 확인 (tool_type 노드)
         node_query = select(Node, Workflow).join(
             Workflow, Node.workflow_id == Workflow.id
@@ -308,17 +308,17 @@ class ToolService:
             Node.tool_id == tool_id_str,
             Workflow.deleted_at.is_(None)
         )
-        
+
         node_result = await self.db.execute(node_query)
         node_workflow_pairs = node_result.all()
-        
+
         for node, workflow in node_workflow_pairs:
             references.append({
                 "type": "workflow",
                 "id": str(workflow.id),
                 "name": workflow.name
             })
-        
+
         if references:
             raise ResourceInUseError(
                 resource_type="tool",

@@ -30,7 +30,6 @@ from time import perf_counter
 import bcrypt
 
 
-
 class PasswordComplexityError(ValueError):
     """Exception raised when password does not meet complexity requirements."""
 

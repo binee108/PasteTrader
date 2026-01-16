@@ -250,3 +250,7 @@ dist-ssr/
 # Environment files
 # ===========================================
 # Deployment & CI/CD
+
+# Secrets and Credentials directories
+secrets/
+credentials/

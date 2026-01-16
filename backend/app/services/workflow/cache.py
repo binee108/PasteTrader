@@ -8,7 +8,6 @@ Cache key format: "validation:{workflow_id}:{version}"
 TTL: 5 minutes (300 seconds) by default, configurable via settings.
 """
 
-import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
@@ -164,24 +163,24 @@ class ValidationCache:
                 if datetime.now(UTC) < expiry_time:
                     logger.debug(f"In-memory cache HIT: {cache_key}")
                     return _deserialize_validation_result(cached_data)
-                else:
-                    # Remove expired entry
-                    del self._in_memory_cache[cache_key]
-                    logger.debug(f"In-memory cache expired: {cache_key}")
+                # Remove expired entry
+                del self._in_memory_cache[cache_key]
+                logger.debug(f"In-memory cache expired: {cache_key}")
             logger.debug(f"In-memory cache MISS: {cache_key}")
             return None
 
         # Try Redis
         try:
+            if self._redis is None:
+                return None
             cached_data = await self._redis.get(cache_key)
 
             if cached_data:
                 logger.debug(f"Redis cache HIT: {cache_key}")
-                result = json.loads(cached_data)
+                result = json.loads(str(cached_data))
                 return _deserialize_validation_result(result)
-            else:
-                logger.debug(f"Redis cache MISS: {cache_key}")
-                return None
+            logger.debug(f"Redis cache MISS: {cache_key}")
+            return None
         except RedisError as e:
             logger.warning(f"Redis get failed: {e}")
             return None
@@ -219,6 +218,8 @@ class ValidationCache:
 
         # Try Redis
         try:
+            if self._redis is None:
+                return False
             cached_data = json.dumps(serialized)
 
             # Set with expiration (TTL)
@@ -270,6 +271,8 @@ class ValidationCache:
 
         # Try Redis
         try:
+            if self._redis is None:
+                return False
             if version is not None:
                 # Delete specific version
                 cache_key = self._make_cache_key(workflow_id, version)
@@ -292,7 +295,7 @@ class ValidationCache:
     async def close(self) -> None:
         """Close Redis connection pool."""
         if self._pool:
-            await self._pool.close()
+            await self._pool.aclose()
             logger.info("Validation cache connection closed")
 
 

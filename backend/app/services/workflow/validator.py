@@ -10,7 +10,7 @@ topology validation, and data flow verification.
 
 import asyncio
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, TypeAlias
 from uuid import UUID
 
 from sqlalchemy import select
@@ -31,7 +31,6 @@ from app.schemas.validation import (
 )
 from app.services.workflow.algorithms import GraphAlgorithms
 from app.services.workflow.cache import (
-    _deserialize_validation_result,
     get_validation_cache,
 )
 from app.services.workflow.exceptions import (
@@ -40,7 +39,7 @@ from app.services.workflow.exceptions import (
 )
 from app.services.workflow.graph import Graph
 
-type _Graph = Graph[UUID]
+_Graph: TypeAlias = "Graph[UUID]"
 
 
 class DAGValidator:
@@ -130,7 +129,7 @@ class DAGValidator:
                 )
 
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Return timeout error instead of raising
             timeout_result = ValidationResult(
                 is_valid=False,
@@ -431,7 +430,7 @@ class DAGValidator:
             target_id = UUID(edge_data["target_node_id"])
             temp_graph.add_edge(source_id, target_id)
 
-        cycle = GraphAlgorithms.detect_cycle(temp_graph)
+        cycle: list[UUID] | None = GraphAlgorithms.detect_cycle(temp_graph)
         if cycle:
             cycle_str = " -> ".join(str(n)[:8] for n in cycle)
             errors.append(
@@ -472,7 +471,7 @@ class DAGValidator:
         graph = self._build_graph(nodes, edges)
 
         # Check for cycle first
-        cycle = GraphAlgorithms.detect_cycle(graph)
+        cycle: list[UUID] | None = GraphAlgorithms.detect_cycle(graph)
         if cycle:
             raise CycleDetectedError(cycle)
 
@@ -506,7 +505,7 @@ class DAGValidator:
                 target_id = UUID(edge_data["target_node_id"])
                 graph.add_edge(source_id, target_id)
 
-        cycle_path = GraphAlgorithms.detect_cycle(graph)
+        cycle_path: list[UUID] | None = GraphAlgorithms.detect_cycle(graph)
 
         if cycle_path:
             cycle_str = " -> ".join(str(n)[:8] for n in cycle_path)
@@ -623,7 +622,7 @@ class DAGValidator:
         node_positions = self._build_node_positions_map(nodes)
 
         # Check for cycles
-        cycle = GraphAlgorithms.detect_cycle(graph)
+        cycle: list[UUID] | None = GraphAlgorithms.detect_cycle(graph)
         if cycle:
             cycle_str = " -> ".join(str(n)[:8] for n in cycle)
             # Get positions for nodes in cycle
@@ -696,7 +695,7 @@ class DAGValidator:
             )
 
         # Check for dangling nodes
-        dangling = GraphAlgorithms.find_dangling_nodes(graph)
+        dangling: set[UUID] = GraphAlgorithms.find_dangling_nodes(graph)
         if dangling:
             errors.append(
                 ValidationErrorDTO(

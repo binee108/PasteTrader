@@ -11,15 +11,12 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import UUID
 
 from pydantic import ConfigDict, Field
 
 from app.schemas.base import BaseSchema
-
-if TYPE_CHECKING:
-    pass
 
 # =============================================================================
 # Validation Enums

@@ -17,12 +17,12 @@ Space Complexity: O(V + E)
 
 from collections import defaultdict
 from collections.abc import Hashable
-from typing import TypeVar
+from typing import Generic, TypeVar
 
 NodeId = TypeVar("NodeId", bound=Hashable)
 
 
-class Graph[NodeId: Hashable]:
+class Graph(Generic[NodeId]):
     """Directed graph data structure for DAG operations.
 
     TAG: [SPEC-010] [DAG] [GRAPH]

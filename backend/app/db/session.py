@@ -53,7 +53,7 @@ async_session = async_sessionmaker(
 )
 
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
+async def get_db() -> AsyncGenerator[AsyncSession]:
     """Get database session dependency for FastAPI.
 
     Yields an async session and ensures proper cleanup after request.

@@ -7,7 +7,7 @@ TAG: [SPEC-001] [API] [DEPENDENCIES]
 REQ: REQ-007 - API Route Dependencies
 """
 
-from typing import Annotated, Any
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Query, status
@@ -15,7 +15,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import InvalidToolConfigError
 from app.core.jwt import verify_token
 from app.db.session import get_db
 from app.models.user import User

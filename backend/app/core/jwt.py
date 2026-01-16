@@ -15,14 +15,13 @@ Features:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from jose import JWTError, jwt
 from jose.exceptions import ExpiredSignatureError, JWTError as JoseJWTError
 
 from app.core.config import settings
-
 
 # JWT Configuration
 JWT_ALGORITHM = "HS256"
@@ -48,9 +47,9 @@ def create_access_token(
         True
     """
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = datetime.now(UTC) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(
+        expire = datetime.now(UTC) + timedelta(
             minutes=DEFAULT_ACCESS_TOKEN_EXPIRE_MINUTES
         )
 

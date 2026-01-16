@@ -8,7 +8,7 @@
 | Title | Node Processor Framework |
 | Created | 2026-01-16 |
 | Updated | 2026-01-16 |
-| Status | Draft |
+| Status | Implemented |
 | Priority | High (P0) |
 | Lifecycle | spec-anchored |
 | Author | binee |
