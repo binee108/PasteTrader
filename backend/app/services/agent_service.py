@@ -47,7 +47,6 @@ class ToolNotFoundError(AgentServiceError):
 class ToolAlreadyAssociatedError(AgentServiceError):
     """Raised when a tool is already associated with an agent."""
 
-
     """Raised when attempting to add an inactive tool to an agent."""
 
 
@@ -84,23 +83,23 @@ class AgentService:
             AgentServiceError: If creation fails.
         """
         try:
-            # Build model_config from schema fields
-            model_config = {
+            # Build llm_config from schema fields
+            llm_config = {
                 "provider": data.model_provider,
                 "model": data.model_name,
             }
             # Add any additional config from the schema
             if data.config:
-                model_config.update(data.config)
+                llm_config.update(data.config)
             if data.memory_config:
-                model_config["memory"] = data.memory_config
+                llm_config["memory"] = data.memory_config
 
             agent = Agent(
                 owner_id=owner_id,
                 name=data.name,
                 description=data.description,
                 system_prompt=data.system_prompt or "",
-                model_config=model_config,
+                llm_config=llm_config,
                 is_public=data.is_public,
             )
             self.db.add(agent)
@@ -110,9 +109,7 @@ class AgentService:
         except Exception as e:
             raise AgentServiceError(f"Failed to create agent: {e}") from e
 
-    async def get(
-        self, agent_id: UUID, include_deleted: bool = False
-    ) -> Agent | None:
+    async def get(self, agent_id: UUID, include_deleted: bool = False) -> Agent | None:
         """Get an agent by ID.
 
         Args:
@@ -157,8 +154,9 @@ class AgentService:
         query = select(Agent).where(Agent.owner_id == owner_id)
 
         if model_provider is not None:
+            # Use func.json_extract for cross-database compatibility (SQLite + PostgreSQL)
             query = query.where(
-                Agent.model_config["provider"].astext == model_provider
+                func.json_extract(Agent.llm_config, "$.provider") == model_provider
             )
 
         if is_active is not None:
@@ -198,8 +196,9 @@ class AgentService:
         query = select(func.count()).where(Agent.owner_id == owner_id)
 
         if model_provider is not None:
+            # Use func.json_extract for cross-database compatibility (SQLite + PostgreSQL)
             query = query.where(
-                Agent.model_config["provider"].astext == model_provider
+                func.json_extract(Agent.llm_config, "$.provider") == model_provider
             )
 
         if is_active is not None:
@@ -265,23 +264,22 @@ class AgentService:
 
         # X-001: 워크플로우에서 사용 중인지 확인
         agent_id_str = str(agent_id)
-        
+
         # Node 테이블에서 이 agent를 사용하는 노드 찾기
-        node_query = select(Node, Workflow).join(
-            Workflow, Node.workflow_id == Workflow.id
-        ).where(
-            Node.agent_id == agent_id_str,
-            Workflow.deleted_at.is_(None)
+        node_query = (
+            select(Node, Workflow)
+            .join(Workflow, Node.workflow_id == Workflow.id)
+            .where(Node.agent_id == agent_id_str, Workflow.deleted_at.is_(None))
         )
-        
+
         node_result = await self.db.execute(node_query)
         node_workflow_pairs = node_result.all()
-        
+
         if node_workflow_pairs:
             # 참조 정보 수집
             references = [
                 {"type": "workflow", "id": str(workflow.id), "name": workflow.name}
-                for node, workflow in node_workflow_pairs
+                for _, workflow in node_workflow_pairs
             ]
             # 중복 제거 (workflow ID로)
             seen = set()
@@ -290,11 +288,11 @@ class AgentService:
                 if ref["id"] not in seen:
                     seen.add(ref["id"])
                     unique_references.append(ref)
-            
+
             raise ResourceInUseError(
                 resource_type="agent",
                 resource_id=agent_id_str,
-                references=unique_references
+                references=unique_references,
             )
 
         agent.soft_delete()
@@ -391,9 +389,7 @@ class AgentService:
         tool_id_str = str(tool_id)
 
         # Find all agents that reference this tool
-        agent_query = select(Agent).where(
-            Agent.deleted_at.is_(None)
-        )
+        agent_query = select(Agent).where(Agent.deleted_at.is_(None))
         agent_result = await self.db.execute(agent_query)
         agents = agent_result.scalars().all()
 
@@ -465,7 +461,9 @@ class AgentService:
             "deleted": deleted_tools,
         }
 
-    async def test_execute(self, agent_id: UUID, input_data: dict[str, Any]) -> dict[str, Any]:
+    async def test_execute(
+        self, agent_id: UUID, input_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Test execute an agent with sample input.
 
         Args:
@@ -490,7 +488,6 @@ class AgentService:
 
         start_time = time.time()
         try:
-
             # TODO: Implement actual agent execution based on model_provider
             # For now, return a mock response
             execution_time_ms = (time.time() - start_time) * 1000
@@ -508,9 +505,7 @@ class AgentService:
             }
         except Exception as e:
             execution_time_ms = (time.time() - start_time) * 1000
-            raise AgentExecutionError(
-                f"Agent execution failed: {e}"
-            ) from e
+            raise AgentExecutionError(f"Agent execution failed: {e}") from e
 
 
 __all__ = [

@@ -15,11 +15,13 @@ and factory patterns for creating test models.
 
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
+from typing import cast
 from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from starlette.types import ASGIApp
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -178,7 +180,7 @@ async def db_session(
 
         # If the test calls session.commit(), this event will restart the nested transaction
         @event.listens_for(session.sync_session, "after_transaction_end")
-        def restart_savepoint(session_sync: Session, transaction) -> None:
+        def _restart_savepoint(session_sync: Session, transaction) -> None:
             if transaction.nested and not transaction._parent.nested:
                 session_sync.expire_all()
                 session_sync.begin_nested()
@@ -266,7 +268,7 @@ async def async_client(
     app.dependency_overrides[get_db] = override_get_db
 
     try:
-        transport = ASGITransport(app=app)
+        transport = ASGITransport(app=cast(ASGIApp, app))
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             yield client
     finally:
@@ -664,18 +666,24 @@ def sample_agent(sample_user_id: str) -> Agent:
 
     Returns:
         Agent: Sample agent instance (not persisted).
+
+    Note:
+        model_provider and model_name are now computed properties derived from llm_config.
+        Access via agent.model_provider and agent.model_name returns string values.
     """
     return Agent(
         id=uuid4(),
         owner_id=sample_user_id,
         name="Test Agent",
         description="A test AI agent for workflow automation",
-        model_provider=ModelProvider.ANTHROPIC,
-        model_name="claude-3-opus-20240229",
         system_prompt="You are a helpful assistant for testing.",
-        config={"temperature": 0.7, "max_tokens": 1000, "top_p": 0.9},
-        tools=[str(uuid4()), str(uuid4())],
-        memory_config={"type": "summary", "max_tokens": 2000},
+        llm_config={
+            "provider": "anthropic",
+            "model": "claude-3-opus-20240229",
+            "temperature": 0.7,
+            "max_tokens": 1000,
+            "top_p": 0.9,
+        },
         is_active=True,
         is_public=False,
     )
@@ -938,24 +946,53 @@ def agent_factory(sample_user_id: str):
     Returns:
         Callable: Factory function that creates Agent instances.
 
+    Note:
+        model_provider and model_name are converted to llm_config internally.
+        The Agent model uses computed properties to expose these from llm_config.
+        Each created agent has a unique name by default to avoid UNIQUE constraint violations.
+        The 'tools' parameter is removed from kwargs as it's a relationship, not a direct field.
+        Use db_session to add Tool relationships after creating the agent.
+
     Example:
         def test_agent_factory(agent_factory):
             agent = agent_factory(model_provider=ModelProvider.OPENAI)
-            assert agent.model_provider == ModelProvider.OPENAI
+            assert agent.model_provider == "openai"
     """
+    # Counter for unique names
+    counter = [0]
 
     def _create(**kwargs):
+        # Extract model_provider and model_name from kwargs (for backward compatibility)
+        # These will be converted to llm_config
+        model_provider = kwargs.pop("model_provider", ModelProvider.ANTHROPIC)
+        model_name = kwargs.pop("model_name", "claude-3-opus-20240229")
+
+        # Convert enum to string if needed
+        provider_str = str(model_provider) if model_provider else "anthropic"
+
+        # Build llm_config from provider and model name
+        llm_config = kwargs.pop("llm_config", None)
+        if llm_config is None:
+            llm_config = {
+                "provider": provider_str,
+                "model": model_name,
+            }
+
+        # Remove 'tools' from kwargs - it's a relationship, not a direct field
+        # Tests that need tools should add Tool objects via the relationship after creation
+        kwargs.pop("tools", None)
+
+        # Generate unique name if not provided
+        counter[0] += 1
+        default_name = f"Factory Agent {counter[0]}"
+
         defaults = {
             "id": uuid4(),
             "owner_id": UUID(sample_user_id),
-            "name": "Factory Agent",
+            "name": default_name,
             "description": None,
-            "model_provider": ModelProvider.ANTHROPIC,
-            "model_name": "claude-3-opus-20240229",
-            "system_prompt": None,
-            "config": {"url": "https://api.example.com/test"},
-            "tools": [],
-            "memory_config": None,
+            "system_prompt": "You are a helpful assistant.",
+            "llm_config": llm_config,
             "is_active": True,
             "is_public": False,
         }

@@ -12,7 +12,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.models.agent import Agent
 from app.models.enums import ModelProvider
 from app.schemas.agent import AgentCreate, AgentUpdate
 from app.services.agent_service import (
@@ -300,7 +299,7 @@ class TestAgentServiceCount:
     async def test_count_agents_all(self, db_session, agent_factory):
         """Test counting all agents."""
         owner_id = uuid4()
-        for i in range(3):
+        for _ in range(3):
             agent = agent_factory(owner_id=owner_id)
             db_session.add(agent)
         await db_session.flush()
@@ -481,18 +480,24 @@ class TestAgentServiceAddTool:
     """Test AgentService.add_tool() method."""
 
     @pytest.mark.asyncio
-    async def test_add_tool_to_agent_success(self, db_session, agent_factory):
+    async def test_add_tool_to_agent_success(
+        self, db_session, agent_factory, tool_factory
+    ):
         """Test successfully adding a tool to an agent."""
+        # Create actual Tool entity first
+        tool = tool_factory()
+        db_session.add(tool)
+        await db_session.flush()
+
         agent = agent_factory(tools=[])
         db_session.add(agent)
         await db_session.flush()
 
         service = AgentService(db_session)
-        tool_id = uuid4()
 
-        updated = await service.add_tool(agent.id, tool_id)
+        updated = await service.add_tool(agent.id, tool.id)
 
-        assert str(tool_id) in updated.tools
+        assert tool in updated.tools
         assert len(updated.tools) == 1
 
     @pytest.mark.asyncio
@@ -504,32 +509,46 @@ class TestAgentServiceAddTool:
             await service.add_tool(uuid4(), uuid4())
 
     @pytest.mark.asyncio
-    async def test_add_tool_already_associated(self, db_session, agent_factory):
+    async def test_add_tool_already_associated(
+        self, db_session, agent_factory, tool_factory
+    ):
         """Test adding duplicate tool raises error."""
-        tool_id = uuid4()
-        agent = agent_factory(tools=[str(tool_id)])
+        # Create actual Tool entity first
+        tool = tool_factory()
+        db_session.add(tool)
+        await db_session.flush()
+
+        # Create agent and add the tool to it
+        agent = agent_factory()
+        agent.tools.append(tool)
         db_session.add(agent)
         await db_session.flush()
 
         service = AgentService(db_session)
 
         with pytest.raises(ToolAlreadyAssociatedError):
-            await service.add_tool(agent.id, tool_id)
+            await service.add_tool(agent.id, tool.id)
 
     @pytest.mark.asyncio
-    async def test_add_tool_updates_modified_flag(self, db_session, agent_factory):
+    async def test_add_tool_updates_modified_flag(
+        self, db_session, agent_factory, tool_factory
+    ):
         """Test that add_tool flags the tools field as modified."""
+        # Create actual Tool entity first
+        tool = tool_factory()
+        db_session.add(tool)
+        await db_session.flush()
+
         agent = agent_factory(tools=[])
         db_session.add(agent)
         await db_session.flush()
 
         service = AgentService(db_session)
-        tool_id = uuid4()
 
-        updated = await service.add_tool(agent.id, tool_id)
+        updated = await service.add_tool(agent.id, tool.id)
 
         # Verify the tool was added and field was flagged
-        assert str(tool_id) in updated.tools
+        assert tool in updated.tools
         assert updated.updated_at is not None
 
 
@@ -586,8 +605,6 @@ class TestAgentServiceRemoveTool:
         assert str(tool_id) not in updated.tools
         assert updated.updated_at is not None
 
-from app.models.tool import Tool
-
 
 class TestAgentServiceTestExecute:
     """Test AgentService.test_execute() method."""
@@ -629,7 +646,9 @@ class TestAgentServiceTestExecute:
             await service.test_execute(agent.id, {})
 
     @pytest.mark.asyncio
-    async def test_agent_execute_returns_execution_time(self, db_session, agent_factory):
+    async def test_agent_execute_returns_execution_time(
+        self, db_session, agent_factory
+    ):
         """Test that agent execution returns execution time."""
         agent = agent_factory(is_active=True)
         db_session.add(agent)
@@ -647,9 +666,7 @@ class TestAgentServiceListDefaultActiveFilter:
     """Test AgentService.list() default is_active=True behavior."""
 
     @pytest.mark.asyncio
-    async def test_list_returns_only_active_by_default(
-        self, db_session, agent_factory
-    ):
+    async def test_list_returns_only_active_by_default(self, db_session, agent_factory):
         """Test that list() returns only active agents by default."""
         owner_id = uuid4()
         active_agent = agent_factory(owner_id=owner_id, is_active=True)

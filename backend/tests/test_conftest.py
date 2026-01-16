@@ -9,6 +9,7 @@ This test module ensures comprehensive coverage of pytest fixtures,
 event listeners, and configuration functions defined in conftest.py.
 """
 
+from collections.abc import AsyncGenerator
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -69,7 +70,9 @@ class TestAsyncEngine:
     """Tests for async_engine fixture."""
 
     @pytest_asyncio.fixture
-    async def engine_instance(self, async_engine: AsyncEngine) -> AsyncEngine:
+    async def engine_instance(
+        self, async_engine: AsyncEngine
+    ) -> AsyncGenerator[AsyncEngine, None]:
         """Provide the engine instance for testing."""
         yield async_engine
 
@@ -346,12 +349,18 @@ class TestAsyncClient:
         assert response.status_code == 200
 
     @pytest.mark.asyncio
-    async def test_async_client_clears_overrides_after_test(self, async_client):
+    async def test_async_client_clears_overrides_after_test(self, async_client: AsyncClient):
         """Test that async_client clears dependency overrides after test.
 
         Verifies that the finally block clears app.dependency_overrides
         to prevent interference with subsequent tests.
+
+        Args:
+            async_client: The async HTTP client fixture (used to trigger setup).
         """
+        # async_client fixture is needed to trigger the dependency override setup
+        _ = async_client  # Mark as intentionally used for fixture side effect
+
         # Overrides should be present during test
         assert len(app.dependency_overrides) > 0
 
@@ -999,10 +1008,15 @@ class TestAgentFactory:
         assert agent.id is not None
 
     def test_agent_factory_uses_defaults(self, agent_factory):
-        """Test that agent_factory uses default values."""
+        """Test that agent_factory uses default values.
+
+        Note: Default name includes a counter for uniqueness (e.g., "Factory Agent 1").
+        model_provider is a computed property returning string from model_config.
+        """
         agent = agent_factory()
-        assert agent.name == "Factory Agent"
-        assert agent.model_provider == ModelProvider.ANTHROPIC
+        assert agent.name.startswith("Factory Agent")
+        # model_provider is now a computed property returning string from model_config
+        assert agent.model_provider == "anthropic"
 
     def test_agent_factory_accepts_custom_values(self, agent_factory):
         """Test that agent_factory accepts custom values."""
@@ -1011,7 +1025,8 @@ class TestAgentFactory:
             model_provider=ModelProvider.OPENAI,
         )
         assert agent.name == "Custom Agent"
-        assert agent.model_provider == ModelProvider.OPENAI
+        # model_provider is now a computed property returning string
+        assert agent.model_provider == "openai"
 
 
 # =============================================================================
