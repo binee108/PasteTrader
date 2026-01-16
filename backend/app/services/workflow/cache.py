@@ -173,11 +173,13 @@ class ValidationCache:
 
         # Try Redis
         try:
+            if self._redis is None:
+                return None
             cached_data = await self._redis.get(cache_key)
 
             if cached_data:
                 logger.debug(f"Redis cache HIT: {cache_key}")
-                result = json.loads(cached_data)
+                result = json.loads(str(cached_data))
                 return _deserialize_validation_result(result)
             else:
                 logger.debug(f"Redis cache MISS: {cache_key}")
@@ -219,6 +221,8 @@ class ValidationCache:
 
         # Try Redis
         try:
+            if self._redis is None:
+                return False
             cached_data = json.dumps(serialized)
 
             # Set with expiration (TTL)
@@ -270,6 +274,8 @@ class ValidationCache:
 
         # Try Redis
         try:
+            if self._redis is None:
+                return False
             if version is not None:
                 # Delete specific version
                 cache_key = self._make_cache_key(workflow_id, version)
@@ -292,7 +298,7 @@ class ValidationCache:
     async def close(self) -> None:
         """Close Redis connection pool."""
         if self._pool:
-            await self._pool.close()
+            await self._pool.aclose()
             logger.info("Validation cache connection closed")
 
 

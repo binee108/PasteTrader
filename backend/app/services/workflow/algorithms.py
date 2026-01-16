@@ -27,7 +27,7 @@ Space Complexity: O(V + E) for all algorithms.
 from __future__ import annotations
 
 from collections import deque
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Generic, TypeVar
 from uuid import UUID
 
 if TYPE_CHECKING:
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 NodeId = TypeVar("NodeId", bound=UUID)
 
 
-class GraphAlgorithms[NodeId: UUID]:
+class GraphAlgorithms(Generic[NodeId]):
     """Collection of graph algorithms for DAG validation.
 
     TAG: [SPEC-010] [DAG] [ALGORITHMS]
@@ -49,7 +49,7 @@ class GraphAlgorithms[NodeId: UUID]:
     Example:
         >>> graph = Graph[UUID]()
         >>> graph.add_edge(uuid1, uuid2)
-        >>> cycle = GraphAlgorithms.detect_cycle(graph)
+        >>> cycle: list[NodeId] | None = GraphAlgorithms.detect_cycle(graph)
         >>> if cycle:
         ...     print(f"Cycle found: {cycle}")
     """
@@ -75,7 +75,7 @@ class GraphAlgorithms[NodeId: UUID]:
             >>> graph.add_edge(a, b)
             >>> graph.add_edge(b, c)
             >>> graph.add_edge(c, a)  # Creates cycle
-            >>> cycle = GraphAlgorithms.detect_cycle(graph)
+            >>> cycle: list[NodeId] | None = GraphAlgorithms.detect_cycle(graph)
             >>> # Returns [a, b, c, a]
         """
         visited: set[NodeId] = set()
@@ -310,7 +310,7 @@ class GraphAlgorithms[NodeId: UUID]:
             >>> graph = Graph[UUID]()
             >>> graph.add_node(a)
             >>> graph.add_edge(b, c)
-            >>> dangling = GraphAlgorithms.find_dangling_nodes(graph)
+            >>> dangling: set[NodeId] = GraphAlgorithms.find_dangling_nodes(graph)
             >>> # Returns {a} (has no edges)
         """
         if len(graph._nodes) <= 1:
@@ -466,14 +466,14 @@ class GraphAlgorithms[NodeId: UUID]:
         errors: list[str] = []
 
         # Check for cycles
-        cycle = GraphAlgorithms.detect_cycle(graph)
+        cycle: list[NodeId] | None = GraphAlgorithms.detect_cycle(graph)
         if cycle:
             cycle_str = " -> ".join(str(n)[:8] for n in cycle)
             errors.append(f"Cycle detected: {cycle_str}")
             return False, errors
 
         # Check for dangling nodes
-        dangling = GraphAlgorithms.find_dangling_nodes(graph)
+        dangling: set[NodeId] = GraphAlgorithms.find_dangling_nodes(graph)
         if dangling and len(graph._nodes) > 1:
             dangling_str = ", ".join(str(n)[:8] for n in dangling)
             errors.append(f"Dangling nodes detected: {dangling_str}")

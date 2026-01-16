@@ -69,7 +69,7 @@ class ProcessorRegistry:
     def register(
         self,
         node_type: str,
-        processor_class: type[BaseProcessor],
+        processor_class: type,
     ) -> None:
         """Register a processor class for a node type.
 
